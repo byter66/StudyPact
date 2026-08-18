@@ -1,0 +1,148 @@
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+html, body, #root {
+    width: 100%;
+    height: 100%;
+}
+
+.hero-section {
+    position: relative;
+    width: 100vw;
+    min-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 32px 64px;
+    background:
+        linear-gradient(
+            90deg,
+            rgba(38, 33, 27, 0.85) 0%,
+            rgba(38, 33, 27, 0.6) 45%,
+            rgba(38, 33, 27, 0.2) 100%
+        ),
+        url('../images/landing.png') center/cover no-repeat;
+    background-attachment: fixed;
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+
+.hero-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.brand-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    padding: 8px 18px;
+    border-radius: 20px;
+}
+
+.brand-name {
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.nav-link {
+    text-decoration: none;
+    color: #f0eee6;
+    font-size: 15px;
+    font-weight: 500;
+    opacity: 0.85;
+    transition: opacity 0.2s;
+    cursor: pointer;
+}
+
+.nav-link:hover {
+    opacity: 1;
+}
+
+
+.btn {
+    display: inline-block;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    border-radius: 25px;
+    font-weight: 500;
+    transition: all 0.3s ease-in-out;
+    font-size: 15px;
+}
+
+.btn-light {
+    background: #ffffffd6;
+    color: #1a1917;
+    padding: 10px 20px;
+}
+
+.btn-light:hover {
+    transform: scale(1.05);
+    background-color: #ffffff;
+}
+
+
+.hero-content {
+    max-width: 620px;
+    margin: auto 0;
+}
+
+.category-pill {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(6px);
+    padding: 6px 16px;
+    border-radius: 16px;
+    font-size: 13px;
+    color: #d1ccc0;
+    margin-bottom: 20px;
+}
+
+.hero-title {
+    font-size: 48px;
+    line-height: 1.15;
+    font-weight: 700;
+    margin: 0 0 16px 0;
+    letter-spacing: -0.5px;
+}
+
+.hero-subtitle {
+    font-size: 16px;
+    line-height: 1.6;
+    color: #cccccc;
+    margin: 0;
+}
+
+
+@media (max-width: 640px) {
+    .hero-section {
+        padding: 20px;
+        background-attachment: scroll;
+    }
+
+    .nav-link {
+        display: none;
+    }
+
+    .hero-title {
+        font-size: 32px;
+    }
+
+    .hero-content {
+        margin: auto 0;
+    }
+}
