@@ -256,7 +256,15 @@ html, body, #root {
     flex-wrap: wrap;
 }
 
+.signup-actions .btn {
+    width: auto;
+    text-align: center;
+}
+
 .btn {
+    display: inline-block;
+    text-decoration: none;
+    text-align: center;
     border: none;
     cursor: pointer;
     border-radius: 25px;

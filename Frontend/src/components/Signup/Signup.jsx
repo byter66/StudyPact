@@ -32,7 +32,6 @@ const Signup = () => {
                     </div>
                 </div>
 
-                <div className="scroll-icon">↓</div>
             </div>
 
             <div className="signup-form-panel">
@@ -80,7 +79,7 @@ const Signup = () => {
                         </p>
 
                         <div className="signup-actions">
-                            <button type="submit" className="btn btn-primary"><Link to="/dashboard">Login</Link></button>
+                            <Link to="/dashboard" className="btn btn-primary">Login</Link>
                             <Link to="/signin" className="btn btn-outline">Sign in</Link>
                         </div>
                     </form>

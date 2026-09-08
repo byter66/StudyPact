@@ -1,0 +1,509 @@
+.sr-page * {
+    box-sizing: border-box;
+}
+
+.sr-page {
+    width: 100%;
+    min-height: 100vh;
+    background: #faf6ee;
+    color: #211f1c;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 24px;
+}
+
+/* ---------- Top bar ---------- */
+
+.sr-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e4ddce;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+}
+
+.sr-room-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sr-badge {
+    background: #f1ebdd;
+    color: #6b6558;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.3px;
+}
+
+.sr-room-title {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.sr-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #5c8a52;
+    display: inline-block;
+}
+
+.sr-live-text {
+    font-size: 12px;
+    color: #5c8a52;
+    font-weight: 600;
+}
+
+.sr-link-btn {
+    font-size: 13px;
+    color: #6b6558;
+    text-decoration: none;
+    border: 1px solid #e4ddce;
+    padding: 8px 16px;
+    border-radius: 999px;
+    transition: background 0.2s;
+}
+
+.sr-link-btn:hover {
+    background: #f1ebdd;
+}
+
+/* ---------- Body grid ---------- */
+
+.sr-body {
+    display: grid;
+    grid-template-columns: 22% 1fr 26%;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+.sr-panel {
+    background: #fffdf8;
+    border: 1px solid #ece6d8;
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.sr-panel-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8a8474;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 10px 0;
+}
+
+/* ---------- Presence panel ---------- */
+
+.sr-presence-panel {
+    overflow-y: auto;
+}
+
+.sr-my-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f1ebdd;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #211f1c;
+    cursor: pointer;
+    margin-bottom: 18px;
+    transition: background 0.2s;
+}
+
+.sr-my-status:hover {
+    background: #ece2cc;
+}
+
+.sr-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.sr-status-studying {
+    background: #5c8a52;
+}
+
+.sr-status-break {
+    background: #c99a3a;
+}
+
+.sr-status-away {
+    background: #b6b0a1;
+}
+
+.sr-member-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sr-member {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sr-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #ede1cd;
+    color: #4a463d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.sr-member-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sr-member-name {
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+.sr-member-status {
+    font-size: 12px;
+    color: #8a8474;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* ---------- Focus panel (center) ---------- */
+
+.sr-focus-panel {
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 20px;
+}
+
+.sr-timer-wrapper {
+    position: relative;
+    width: 150px;
+    height: 150px;
+    margin-bottom: 16px;
+}
+
+.sr-timer-ring {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.sr-ring-bg {
+    fill: none;
+    stroke: #ece6d8;
+    stroke-width: 8;
+}
+
+.sr-ring-progress {
+    fill: none;
+    stroke: #c1602e;
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 327;
+    transition: stroke-dashoffset 1s linear;
+}
+
+.sr-timer-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.sr-timer-value {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.sr-timer-caption {
+    font-size: 11px;
+    color: #8a8474;
+    margin-top: 2px;
+}
+
+.sr-timer-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.sr-btn {
+    border: none;
+    cursor: pointer;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 9px 22px;
+    transition: all 0.2s ease-in-out;
+}
+
+.sr-btn-primary {
+    background: #c1602e;
+    color: #ffffff;
+}
+
+.sr-btn-primary:hover {
+    background: #a8511f;
+}
+
+.sr-btn-outline {
+    background: transparent;
+    color: #211f1c;
+    border: 1px solid #e4ddce;
+}
+
+.sr-btn-outline:hover {
+    background: #f1ebdd;
+}
+
+.sr-quick-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+.sr-quick-card {
+    background: #f1ebdd;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.2s;
+}
+
+a.sr-quick-card:hover {
+    background: #ece2cc;
+}
+
+.sr-quick-title {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.sr-quick-sub {
+    font-size: 11.5px;
+    color: #8a8474;
+}
+
+.sr-goal-strip {
+    width: 100%;
+    border-top: 1px solid #ece6d8;
+    padding-top: 14px;
+}
+
+.sr-goal-strip-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8a8474;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.sr-goal-strip-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sr-goal-chip {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #f1ebdd;
+    color: #6b6558;
+}
+
+.sr-goal-chip.sr-goal-done {
+    background: #e7efdf;
+    color: #4f6b3f;
+    text-decoration: line-through;
+    text-decoration-color: #a9c19a;
+}
+
+/* ---------- Side panel (chat) ---------- */
+
+.sr-side-panel {
+    gap: 14px;
+}
+
+.sr-doubt-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f1ebdd;
+    border-radius: 10px;
+    padding: 12px 14px;
+    text-decoration: none;
+    color: inherit;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.sr-doubt-entry:hover {
+    background: #ece2cc;
+}
+
+.sr-doubt-icon {
+    font-size: 18px;
+}
+
+.sr-doubt-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.sr-doubt-sub {
+    display: block;
+    font-size: 11.5px;
+    color: #8a8474;
+}
+
+.sr-chat {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.sr-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-right: 4px;
+}
+
+.sr-chat-message {
+    background: #f1ebdd;
+    border-radius: 10px;
+    padding: 8px 12px;
+    max-width: 90%;
+    align-self: flex-start;
+}
+
+.sr-chat-message.sr-chat-mine {
+    background: #f6e4d8;
+    align-self: flex-end;
+}
+
+.sr-chat-author {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #8a8474;
+    margin-bottom: 2px;
+}
+
+.sr-chat-text {
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.sr-chat-form {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.sr-chat-input {
+    flex: 1;
+    border: 1px solid #e4ddce;
+    border-radius: 999px;
+    padding: 9px 14px;
+    font-size: 13px;
+    outline: none;
+    background: #ffffff;
+}
+
+.sr-chat-input:focus {
+    border-color: #c1602e;
+}
+
+.sr-chat-send {
+    background: #c1602e;
+    color: #ffffff;
+    border: none;
+    border-radius: 999px;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sr-chat-send:hover {
+    background: #a8511f;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 1024px) {
+    .sr-body {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+    }
+
+    .sr-page {
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .sr-focus-panel {
+        padding-top: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .sr-page {
+        padding: 12px;
+    }
+
+    .sr-quick-row {
+        grid-template-columns: 1fr;
+    }
+
+    .sr-room-title {
+        font-size: 16px;
+    }
+}

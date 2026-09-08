@@ -60,7 +60,7 @@ const Signin = () => {
 
                         <a href="#forgot-password" className="forgot-link">Forgot password?</a>
 
-                        <button type="submit" className="btn btn-primary d-link">Sign in</button>
+                        <Link to="/dashboard" className="btn btn-primary">Sign in</Link>
                     </form>
 
                     <p className="signup-prompt">

@@ -1,0 +1,139 @@
+.room-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 104px;
+  padding: 14px 16px;
+  background: #FDFBF7;
+  border: 1px solid #EDE6D9;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.room-card:hover {
+  transform: translateY(-2px);
+  border-color: #C1602E;
+  box-shadow: 0 6px 16px rgba(33, 31, 28, 0.08);
+}
+
+.room-card:focus-visible {
+  outline: 2px solid #C1602E;
+  outline-offset: 2px;
+}
+
+.room-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.room-card-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #211F1C;
+}
+
+.tint-a .room-card-tag { background: #F3DCCB; }
+.tint-b .room-card-tag { background: #E4E6D5; }
+.tint-c .room-card-tag { background: #E9D9E8; }
+.tint-d .room-card-tag { background: #D9E3E6; }
+.tint-e .room-card-tag { background: #EFE0C9; }
+.tint-f .room-card-tag { background: #DCE6DA; }
+
+.room-card-live {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5C6B3F;
+}
+
+.room-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #211F1C;
+  line-height: 1.25;
+}
+
+.room-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.room-card-avatars {
+  display: flex;
+}
+
+.room-card-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #EDE6D9;
+  color: #211F1C;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #FDFBF7;
+  margin-left: -8px;
+}
+
+.room-card-avatar:first-child {
+  margin-left: 0;
+}
+
+.room-card-avatar-more {
+  background: #C1602E;
+  color: #FDFBF7;
+}
+
+.room-card-count {
+  font-size: 11px;
+  color: #6B6558;
+  white-space: nowrap;
+}
+
+.room-card-create {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1.5px dashed #C1602E;
+  background: transparent;
+  color: #C1602E;
+}
+
+.room-card-create:hover {
+  background: #FBEFE6;
+  transform: none;
+}
+
+.room-card-create-plus {
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.room-card-create-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+  .room-card {
+    min-height: 96px;
+    padding: 12px 14px;
+  }
+}

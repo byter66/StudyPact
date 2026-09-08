@@ -249,6 +249,8 @@ html, body, #root {
 }
 
 .btn {
+    display: inline-block;
+    text-decoration: none;
     border: none;
     cursor: pointer;
     border-radius: 25px;
@@ -261,6 +263,8 @@ html, body, #root {
     color: #ffffff;
     padding: 14px;
     font-size: 15px;
+    text-align: center;
+    width: 100%;
 }
 
 .btn-primary:hover {
