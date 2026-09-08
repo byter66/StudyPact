@@ -3,5 +3,5 @@ import { env } from "./env";
 
 export const supabase = createClient(
   env.supabaseUrl,
-  env.supabaseAnonKey
+  env.supabasePublishableKey
 );

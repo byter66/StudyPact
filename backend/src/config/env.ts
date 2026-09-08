@@ -4,7 +4,7 @@ dotenv.config();
 
 const required = [
   "SUPABASE_URL",
-  "SUPABASE_ANON_KEY",
+  "SUPABASE_PUBLISHABLE_KEY",
 ];
 
 for (const key of required) {
@@ -16,6 +16,6 @@ for (const key of required) {
 export const env = {
   port: Number(process.env.PORT ?? 5000),
   supabaseUrl: process.env.SUPABASE_URL!,
-  supabaseAnonKey: process.env.SUPABASE_ANON_KEY!,
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY!,
+  supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
 };
