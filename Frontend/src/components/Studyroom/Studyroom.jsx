@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import {
+    completePomodoroSession,
+    createPomodoroSession,
+    updatePomodoroSession,
+} from '../../services/pomodoroApi';
 import './StudyRoom.css';
 
 // Should match the same rooms your Dashboard renders.
@@ -50,21 +55,75 @@ const StudyRoom = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [messages, setMessages] = useState(INITIAL_MESSAGES);
     const [draft, setDraft] = useState('');
+    const [sessionId, setSessionId] = useState(null);
+    const [sessionStatus, setSessionStatus] = useState(null);
+    const [pomodoroError, setPomodoroError] = useState('');
     const intervalRef = useRef(null);
+    const sessionIdRef = useRef(null);
+    const accumulatedFocusedSecondsRef = useRef(0);
+    const startedAtRef = useRef(null);
+    const operationInProgressRef = useRef(false);
+    const completionAttemptedRef = useRef(false);
+
+    const getFocusedDuration = () => {
+        const runningSeconds = startedAtRef.current
+            ? Math.floor((Date.now() - startedAtRef.current) / 1000)
+            : 0;
+
+        return Math.min(
+            FOCUS_MINUTES * 60,
+            accumulatedFocusedSecondsRef.current + runningSeconds,
+        );
+    };
 
     useEffect(() => {
-        if (isRunning) {
-            intervalRef.current = setInterval(() => {
-                setSecondsLeft((prev) => {
-                    if (prev <= 1) {
-                        clearInterval(intervalRef.current);
-                        setIsRunning(false);
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
+        if (!isRunning || !startedAtRef.current) {
+            return undefined;
         }
+
+        const updateCountdown = () => {
+            const elapsedSeconds = getFocusedDuration();
+            const remainingSeconds = Math.max(
+                0,
+                FOCUS_MINUTES * 60 - elapsedSeconds,
+            );
+
+            setSecondsLeft(remainingSeconds);
+
+            if (remainingSeconds === 0) {
+                clearInterval(intervalRef.current);
+                startedAtRef.current = null;
+                setIsRunning(false);
+
+                const currentSessionId = sessionIdRef.current;
+                if (
+                    currentSessionId &&
+                    !completionAttemptedRef.current &&
+                    !operationInProgressRef.current
+                ) {
+                    completionAttemptedRef.current = true;
+                    operationInProgressRef.current = true;
+                    completePomodoroSession(
+                        currentSessionId,
+                        FOCUS_MINUTES * 60,
+                    )
+                        .then(() => {
+                            setSessionStatus('completed');
+                        })
+                        .catch((error) => {
+                            completionAttemptedRef.current = false;
+                            setPomodoroError(error.message);
+                        })
+                        .finally(() => {
+                            operationInProgressRef.current = false;
+                        });
+                }
+            }
+        };
+
+        updateCountdown();
+        intervalRef.current = setInterval(updateCountdown, 1000);
+
         return () => clearInterval(intervalRef.current);
     }, [isRunning]);
 
@@ -79,9 +138,92 @@ const StudyRoom = () => {
         setMyStatus(STATUS_CYCLE[nextIndex]);
     };
 
-    const handleReset = () => {
+    const handleStartPause = async () => {
+        if (operationInProgressRef.current) return;
+
+        operationInProgressRef.current = true;
+        setPomodoroError('');
+
+        try {
+            if (isRunning) {
+                const currentFocusedDuration = getFocusedDuration();
+                setIsRunning(false);
+                startedAtRef.current = null;
+                setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
+                setSessionStatus('paused');
+
+                await updatePomodoroSession(sessionIdRef.current, {
+                    status: 'paused',
+                    focusedDurationSeconds: currentFocusedDuration,
+                });
+
+                accumulatedFocusedSecondsRef.current = currentFocusedDuration;
+                return;
+            }
+
+            let currentSessionId = sessionIdRef.current;
+            let currentFocusedDuration = accumulatedFocusedSecondsRef.current;
+
+            if (sessionStatus === 'paused' && currentSessionId) {
+                await updatePomodoroSession(currentSessionId, {
+                    status: 'active',
+                    focusedDurationSeconds: currentFocusedDuration,
+                });
+            } else {
+                const session = await createPomodoroSession(
+                    id,
+                    FOCUS_MINUTES * 60,
+                );
+                currentSessionId = session.id;
+                setSessionId(currentSessionId);
+                sessionIdRef.current = currentSessionId;
+                currentFocusedDuration = 0;
+                accumulatedFocusedSecondsRef.current = 0;
+                completionAttemptedRef.current = false;
+            }
+
+            startedAtRef.current = Date.now();
+            accumulatedFocusedSecondsRef.current = currentFocusedDuration;
+            setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
+            setSessionStatus('active');
+            setIsRunning(true);
+        } catch (error) {
+            setPomodoroError(error.message);
+        } finally {
+            operationInProgressRef.current = false;
+        }
+    };
+
+    const handleReset = async () => {
+        if (operationInProgressRef.current) return;
+
+        operationInProgressRef.current = true;
+        setPomodoroError('');
         setIsRunning(false);
-        setSecondsLeft(FOCUS_MINUTES * 60);
+        clearInterval(intervalRef.current);
+        const currentFocusedDuration = getFocusedDuration();
+        startedAtRef.current = null;
+
+        try {
+            const currentSessionId = sessionIdRef.current || sessionId;
+            if (currentSessionId) {
+                await updatePomodoroSession(currentSessionId, {
+                    status: 'cancelled',
+                    focusedDurationSeconds: currentFocusedDuration,
+                });
+            }
+
+            setSessionId(null);
+            sessionIdRef.current = null;
+            setSessionStatus(null);
+            accumulatedFocusedSecondsRef.current = 0;
+            completionAttemptedRef.current = false;
+            setSecondsLeft(FOCUS_MINUTES * 60);
+        } catch (error) {
+            setPomodoroError(error.message);
+        } finally {
+            operationInProgressRef.current = false;
+        }
     };
 
     const sendMessage = (e) => {
@@ -161,11 +303,19 @@ const StudyRoom = () => {
                         <button className="sr-btn sr-btn-outline" onClick={handleReset}>Reset</button>
                         <button
                             className="sr-btn sr-btn-primary"
-                            onClick={() => setIsRunning((r) => !r)}
+                            onClick={handleStartPause}
                         >
                             {isRunning ? 'Pause' : 'Start'}
                         </button>
                     </div>
+                    {pomodoroError && (
+                        <span
+                            role="alert"
+                            style={{ color: '#a8511f', fontSize: '12px', marginBottom: '12px' }}
+                        >
+                            {pomodoroError}
+                        </span>
+                    )}
 
                     <div className="sr-quick-row">
                         <Link to="/mock-room" className="sr-quick-card">
