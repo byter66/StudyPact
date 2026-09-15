@@ -318,7 +318,7 @@ const StudyRoom = () => {
                     )}
 
                     <div className="sr-quick-row">
-                        <Link to="/mock-room" className="sr-quick-card">
+                        <Link to={`/mock-room/${id}`} className="sr-quick-card">
                             <span className="sr-quick-title">Create Mock Room</span>
                             <span className="sr-quick-sub">Timed practice + peer review</span>
                         </Link>
@@ -342,7 +342,7 @@ const StudyRoom = () => {
 
                 {/* Right: chat + doubt forum */}
                 <aside className="sr-panel sr-side-panel">
-                    <Link to="/doubt-forum" className="sr-doubt-entry">
+                    <Link to={`/doubt-forum/${id}`} className="sr-doubt-entry">
                         <span className="sr-doubt-icon">💬</span>
                         <div>
                             <span className="sr-doubt-title">Doubt Forum</span>

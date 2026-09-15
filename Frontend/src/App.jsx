@@ -4,9 +4,10 @@ import Landing from './components/Landing/Landing';
 import Signin from './components/Signin/Signin';
 import Signup from './components/Signup/Signup';
 import Dashboard from './components/Dashboard/Dashboard';
-import StudyRoom from './components/StudyRoom/StudyRoom';
+import Studyroom from './components/Studyroom/Studyroom';
 import Mockroom from './components/Mockroom/Mockroom';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
+import Doubtforum from './components/Doubtforum/Doubtforum';
 
 function App() {
   return (
@@ -39,6 +40,10 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/study-room/:id" element={<Studyroom />} />
+        <Route path="/mock-room/:id" element={<Mockroom />} />
+        <Route path="/doubt-forum/:id" element={<Doubtforum />} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import './MockRoom.css';
@@ -167,6 +166,32 @@ const MockRoom = () => {
                             Feedback and rubric scores become visible only once all attempters' papers are reviewed.
                         </p>
                     </div>
+
+                   <Link
+    to={`/doubt-forum/${id}`}
+    style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        background: '#f1ebdd',
+        borderRadius: '10px',
+        padding: '12px 14px',
+        marginTop: '12px',
+        textDecoration: 'none',
+        boxSizing: 'border-box',
+    }}
+>
+    <span style={{ fontSize: '18px', color: '#211f1c' }}>💬</span>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <span style={{ fontSize: '13px', fontWeight: 700, color: '#211f1c' }}>
+            Stuck on this question?
+        </span>
+        <span style={{ fontSize: '11.5px', color: '#8a8474' }}>
+            Ask in the Doubt Forum
+        </span>
+    </div>
+</Link>
 
                 </section>
             </div>

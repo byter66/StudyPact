@@ -291,6 +291,49 @@
     line-height: 1.5;
 }
 
+/* ---------- Doubt forum entry ---------- */
+
+a.mr-doubt-entry,
+a.mr-doubt-entry:visited,
+a.mr-doubt-entry:hover,
+a.mr-doubt-entry:active {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f1ebdd;
+    border-radius: 10px;
+    padding: 12px 14px;
+    text-decoration: none !important;
+    margin-top: 12px;
+    transition: background 0.2s;
+    box-sizing: border-box;
+}
+
+a.mr-doubt-entry:hover {
+    background: #ece2cc;
+}
+
+.mr-doubt-icon {
+    font-size: 18px;
+    color: #211f1c !important;
+}
+
+span.mr-doubt-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: #211f1c !important;
+    text-decoration: none !important;
+}
+
+span.mr-doubt-sub {
+    display: block;
+    font-size: 11.5px;
+    color: #8a8474 !important;
+    text-decoration: none !important;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 900px) {

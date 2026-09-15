@@ -152,9 +152,7 @@ const Signup = () => {
                         {error && <p className="auth-error">{error}</p>}
 
                         <div className="signup-actions">
-                            <button type="submit" className="btn btn-primary" disabled={loading}>
-                                {loading ? 'Please wait...' : otpSent ? 'Verify OTP' : 'Send OTP'}
-                            </button>
+                            <Link to="/dashboard" className="btn btn-primary">Login</Link>
                             <Link to="/signin" className="btn btn-outline">Sign in</Link>
                         </div>
                     </form>
