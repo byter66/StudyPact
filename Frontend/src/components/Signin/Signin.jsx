@@ -1,8 +1,64 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import './Signin.css';
+import { authService } from '../../services/authService';
 
 const Signin = () => {
+    const navigate = useNavigate();
+    const [phone, setPhone] = useState('');
+    const [otp, setOtp] = useState('');
+    const [otpSent, setOtpSent] = useState(false);
+    const [generatedOtp, setGeneratedOtp] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const normalizePhone = (value) => value.replace(/\D/g, '').slice(0, 10);
+
+    const handleRequestOtp = async (event) => {
+        event.preventDefault();
+        setError('');
+
+        const cleanPhone = normalizePhone(phone);
+        if (!/^\d{10}$/.test(cleanPhone)) {
+            setError('Enter a valid 10-digit Indian mobile number.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const result = await authService.requestOtp(cleanPhone);
+            setGeneratedOtp(result?.otp || '');
+            setOtpSent(true);
+        } catch (requestError) {
+            setError(requestError.message || 'Unable to send OTP.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async (event) => {
+        event.preventDefault();
+        setError('');
+
+        if (!/^\d{6}$/.test(otp)) {
+            setError('Enter the 6-digit OTP sent to your phone number.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const result = await authService.verifyOtp(normalizePhone(phone), otp);
+            if (result?.user) {
+                window.alert('Successfully signed in!');
+                navigate('/dashboard');
+            }
+        } catch (verifyError) {
+            setError(verifyError.message || 'OTP verification failed.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <section className="signin-section">
 
@@ -39,28 +95,45 @@ const Signin = () => {
 
                 <div className="signin-form-wrapper">
                     <h2 className="form-title">Sign in</h2>
-                    <p className="form-subtitle">Enter your details to continue.</p>
+                    <p className="form-subtitle">Enter your phone number to receive an OTP.</p>
 
-                    <form className="signin-form" onSubmit={(e) => e.preventDefault()}>
-                        <label className="field-label" htmlFor="username">Username</label>
+                    <form className="signin-form" onSubmit={otpSent ? handleVerifyOtp : handleRequestOtp}>
+                        <label className="field-label" htmlFor="phone">Phone no.</label>
                         <input
-                            id="username"
-                            type="text"
-                            placeholder="your_username"
+                            id="phone"
+                            type="tel"
+                            value={phone}
+                            onChange={(event) => setPhone(normalizePhone(event.target.value))}
                             className="field-input"
+                            inputMode="numeric"
+                            maxLength={10}
                         />
 
-                        <label className="field-label" htmlFor="password">Password</label>
-                        <input
-                            id="password"
-                            type="password"
-                            placeholder="••••••••"
-                            className="field-input"
-                        />
+                        {otpSent && (
+                            <>
+                                {generatedOtp && (
+                                    <p className="dev-otp-notice">
+                                        Your OTP is <strong>{generatedOtp}</strong>
+                                    </p>
+                                )}
+                                <label className="field-label" htmlFor="otp">OTP</label>
+                                <input
+                                    id="otp"
+                                    type="text"
+                                    value={otp}
+                                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    className="field-input"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                />
+                            </>
+                        )}
 
-                        <a href="#forgot-password" className="forgot-link">Forgot password?</a>
+                        {error && <p className="auth-error">{error}</p>}
 
-                        <Link to="/dashboard" className="btn btn-primary">Sign in</Link>
+                        <button type="submit" className="btn btn-primary" disabled={loading}>
+                            {loading ? 'Please wait...' : otpSent ? 'Verify OTP' : 'Send OTP'}
+                        </button>
                     </form>
 
                     <p className="signup-prompt">

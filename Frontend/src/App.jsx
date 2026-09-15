@@ -6,6 +6,7 @@ import Signup from './components/Signup/Signup';
 import Dashboard from './components/Dashboard/Dashboard';
 import StudyRoom from './components/StudyRoom/StudyRoom';
 import Mockroom from './components/Mockroom/Mockroom';
+import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 
 function App() {
   return (
@@ -14,9 +15,30 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/signin" element={<Signin />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/study-room/:id" element={<StudyRoom />} />
-        <Route path="/mock-room" element={<Mockroom />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/study-room/:id"
+          element={
+            <ProtectedRoute>
+              <StudyRoom />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/mock-room"
+          element={
+            <ProtectedRoute>
+              <Mockroom />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

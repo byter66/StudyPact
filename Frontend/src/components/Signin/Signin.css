@@ -236,6 +236,20 @@ html, body, #root {
     border-color: #c1602e;
 }
 
+.field-input::placeholder {
+    color: transparent;
+    opacity: 0;
+}
+
+.dev-otp-notice {
+    margin: -4px 0 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f4e5d2;
+    color: #6b3b1e;
+    font-size: 13px;
+}
+
 .forgot-link {
     align-self: flex-end;
     font-size: 13px;

@@ -1,8 +1,70 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import './Signup.css';
+import { authService } from '../../services/authService';
 
 const Signup = () => {
+    const navigate = useNavigate();
+    const [fullName, setFullName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [otp, setOtp] = useState('');
+    const [otpSent, setOtpSent] = useState(false);
+    const [generatedOtp, setGeneratedOtp] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const normalizePhone = (value) => value.replace(/\D/g, '').slice(0, 10);
+
+    const handleRequestOtp = async (event) => {
+        event.preventDefault();
+        setError('');
+
+        const cleanPhone = normalizePhone(phone);
+        if (!/^\d{10}$/.test(cleanPhone)) {
+            setError('Enter a valid 10-digit Indian mobile number.');
+            return;
+        }
+
+        if (!fullName.trim()) {
+            setError('Please enter your full name.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const result = await authService.requestOtp(cleanPhone, fullName.trim());
+            setGeneratedOtp(result?.otp || '');
+            setOtpSent(true);
+        } catch (requestError) {
+            setError(requestError.message || 'Unable to send OTP.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async (event) => {
+        event.preventDefault();
+        setError('');
+
+        if (!/^\d{6}$/.test(otp)) {
+            setError('Enter the 6-digit OTP sent to your phone number.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const result = await authService.verifyOtp(normalizePhone(phone), otp, fullName.trim());
+            if (result?.user) {
+                window.alert('Successfully registered!');
+                navigate('/dashboard');
+            }
+        } catch (verifyError) {
+            setError(verifyError.message || 'OTP verification failed.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <section className="signup-section">
 
@@ -39,30 +101,15 @@ const Signup = () => {
 
                 <div className="signup-form-wrapper">
                     <h2 className="form-title">Get started</h2>
-                    <p className="form-subtitle">Sign in, or create an account below.</p>
+                    <p className="form-subtitle">Create an account using your phone number.</p>
 
-                    <form className="signup-form" onSubmit={(e) => e.preventDefault()}>
-                        <label className="field-label" htmlFor="username">Username</label>
+                    <form className="signup-form" onSubmit={otpSent ? handleVerifyOtp : handleRequestOtp}>
+                        <label className="field-label" htmlFor="fullName">Full name</label>
                         <input
-                            id="username"
+                            id="fullName"
                             type="text"
-                            placeholder="your_username"
-                            className="field-input"
-                        />
-
-                        <label className="field-label" htmlFor="password">Password</label>
-                        <input
-                            id="password"
-                            type="password"
-                            placeholder="••••••••"
-                            className="field-input"
-                        />
-
-                        <label className="field-label" htmlFor="email">Email</label>
-                        <input
-                            id="email"
-                            type="email"
-                            placeholder="name@email.com"
+                            value={fullName}
+                            onChange={(event) => setFullName(event.target.value)}
                             className="field-input"
                         />
 
@@ -70,16 +117,44 @@ const Signup = () => {
                         <input
                             id="phone"
                             type="tel"
-                            placeholder="+91 98765 43210"
+                            value={phone}
+                            onChange={(event) => setPhone(normalizePhone(event.target.value))}
                             className="field-input"
+                            inputMode="numeric"
+                            maxLength={10}
                         />
+
+                        {otpSent && (
+                            <>
+                                {generatedOtp && (
+                                    <p className="dev-otp-notice">
+                                        Your development OTP is <strong>{generatedOtp}</strong>
+                                    </p>
+                                )}
+                                <label className="field-label" htmlFor="otp">OTP</label>
+                                <input
+                                    id="otp"
+                                    type="text"
+                                    value={otp}
+                                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    className="field-input"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                />
+                            </>
+                        )}
+
                         <p className="otp-note">
                             <span className="otp-icon">🛡</span>
-                            For one-time OTP verification (India only)
+                            One-time OTP verification for Indian users only.
                         </p>
 
+                        {error && <p className="auth-error">{error}</p>}
+
                         <div className="signup-actions">
-                            <Link to="/dashboard" className="btn btn-primary">Login</Link>
+                            <button type="submit" className="btn btn-primary" disabled={loading}>
+                                {loading ? 'Please wait...' : otpSent ? 'Verify OTP' : 'Send OTP'}
+                            </button>
                             <Link to="/signin" className="btn btn-outline">Sign in</Link>
                         </div>
                     </form>

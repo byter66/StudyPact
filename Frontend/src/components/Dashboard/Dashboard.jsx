@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RoomCard from "../RoomCard/RoomCard";
+import { useAuth } from "../../context/AuthContext";
 import "./Dashboard.css";
 
 // --- Mock data. Swap for real Supabase shapes once Niveditha/Mahima confirm the schema. ---
@@ -127,6 +128,7 @@ function CreateRoomModal({ onClose, onCreate }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [goals, setGoals] = useState(MOCK_GOALS);
   const [rooms, setRooms] = useState(MOCK_ROOMS);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -142,7 +144,7 @@ export default function Dashboard() {
       id: `r${Date.now()}`,
       examTag: activeFilter === "All" ? "UPSC" : activeFilter,
       title: name,
-      members: [MOCK_USER.name],
+      members: [user?.full_name || MOCK_USER.name],
       isLive: true,
       maxMembers,
       hasPassword: Boolean(password),
@@ -155,6 +157,7 @@ export default function Dashboard() {
     activeFilter === "All" ? rooms : rooms.filter((r) => r.examTag === activeFilter);
 
   const completedCount = goals.filter((g) => g.done).length;
+  const displayName = user?.full_name || MOCK_USER.name;
 
   return (
     <div className={`dashboard-shell ${menuOpen ? "sidebar-open" : ""}`}>
@@ -169,15 +172,21 @@ export default function Dashboard() {
       <aside className="dashboard-sidebar-nav">
         <div className="sidebar-top">
           <span className="sidebar-icon sidebar-menu" aria-hidden="true">☰</span>
-          <span className="sidebar-avatar" title={MOCK_USER.name}>
-            {MOCK_USER.name.charAt(0).toUpperCase()}
+          <span className="sidebar-avatar" title={displayName}>
+            {displayName.charAt(0).toUpperCase()}
           </span>
           <span className="sidebar-rank">Rank #{MOCK_USER.rank}</span>
         </div>
 
         <div className="sidebar-bottom">
           <button className="sidebar-icon-btn" title="Settings" aria-label="Settings">⚙️</button>
-          <button className="sidebar-logout" onClick={() => navigate("/signin")}>
+          <button
+            className="sidebar-logout"
+            onClick={async () => {
+              await signOut();
+              navigate('/signin');
+            }}
+          >
             Log out
           </button>
         </div>
@@ -187,7 +196,7 @@ export default function Dashboard() {
         <header className="dashboard-header">
           <div>
             <p className="dashboard-eyebrow">Welcome back</p>
-            <h1 className="dashboard-greeting">{MOCK_USER.name}</h1>
+            <h1 className="dashboard-greeting">{displayName}</h1>
           </div>
           <StreakRing value={MOCK_USER.streak} goal={MOCK_USER.streakGoal} />
         </header>
