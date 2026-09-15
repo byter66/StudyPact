@@ -4,6 +4,7 @@ import healthRoutes from "./routes/health.routes";
 import pomodoroRoutes from "./routes/pomodoro.routes";
 import roomRoutes from "./routes/room.routes";
 import authRoutes from "./routes/auth.routes";
+import dailyGoalRoutes from "./routes/dailyGoal.routes";
 import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
@@ -21,6 +22,7 @@ app.get("/", (_req, res) => {
 app.use("/api/health", healthRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api", pomodoroRoutes);
+app.use("/api", dailyGoalRoutes);
 app.use("/api/auth", authRoutes);
 
 app.use(errorHandler);
