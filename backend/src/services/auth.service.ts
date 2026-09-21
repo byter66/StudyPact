@@ -33,6 +33,49 @@ const decodeDevToken = (token: string) => {
   }
 };
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const getOrCreateDevelopmentUser = async (
+  phone: string,
+  fullName: string
+) => {
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 100,
+    });
+
+    if (error) {
+      throw new Error(`Unable to look up the Supabase user: ${error.message}`);
+    }
+
+    const existingUser = data.users.find((user) => user.phone === phone);
+    if (existingUser) {
+      return existingUser;
+    }
+
+    if (data.users.length < 100) {
+      break;
+    }
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    phone,
+    phone_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+      phone_verified: true,
+    },
+  });
+
+  if (error || !data.user) {
+    throw new Error(`Unable to create the Supabase user: ${error?.message ?? "Unknown error."}`);
+  }
+
+  return data.user;
+};
+
 const sanitizeProfileName = (fullName?: string | null): string => {
   const value = fullName?.trim();
   return value && value.length > 0 ? value : "StudyPact user";
@@ -155,13 +198,21 @@ export const verifyOtp = async (phone: string, token: string, fullName?: string)
     }
 
     const finalFullName = sanitizeProfileName(fullName);
-    const userId = `dev-user-${normalizedPhone.replace(/\D/g, "")}`;
+    const supabaseUser = await getOrCreateDevelopmentUser(
+      normalizedPhone,
+      finalFullName
+    );
 
-    await saveProfile(userId, finalFullName, normalizedPhone); 
+    await saveProfile(
+      supabaseUser.id,
+      finalFullName,
+      normalizedPhone,
+      supabaseUser.email
+    );
 
     const user = {
-      id: userId,
-      email: null,
+      id: supabaseUser.id,
+      email: supabaseUser.email ?? null,
       phone: normalizedPhone,
       full_name: finalFullName,
       phone_verified: true,
@@ -228,7 +279,7 @@ export const getCurrentUser = async (accessToken: string) => {
 
   const decoded = decodeDevToken(accessToken);
 
-  if (decoded) {
+  if (decoded && UUID_PATTERN.test(decoded.id)) {
     const user = {
       id: decoded.id,
       email: null,
