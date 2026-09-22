@@ -1,5 +1,6 @@
 export interface Room {
   id: string;
+  roomCode: string;
   name: string;
   examCategory: string;
   description: string;
@@ -20,8 +21,15 @@ export interface JoinRoomResult {
   alreadyMember: boolean;
 }
 
+export interface RoomMember {
+  userId: string;
+  displayName: string;
+  joinedAt: string;
+}
+
 export interface RoomRow {
   id: string;
+  room_code: string;
   name: string;
   exam_category: string;
   description: string;

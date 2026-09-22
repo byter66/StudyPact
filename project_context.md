@@ -7,11 +7,13 @@ StudyPact is an accountability-based collaborative study platform.
 Completed:
 - Landing page
 - Sign-in and sign-up screens
-- Indian phone-number authentication flow
+- Indian phone-number authentication flow for sign-in
+- Direct account creation flow for sign-up
 - Development OTP generation with six-digit random codes
 - OTP expiry and single-use verification
 - Protected routing and auth-aware app flow
-- Frontend auth service and local session persistence
+- Frontend auth service, registration API call, and local session persistence
+- Automatic redirect from sign-up to sign-in after successful registration
 - Dashboard UI with room overview layout
 - Study room UI shell
 - Mock room UI shell
@@ -25,7 +27,7 @@ Partially implemented / in progress:
 - Supabase integration and database persistence
 - Study room functionality (UI and basic room APIs exist; joining, presence, and realtime logic are pending)
 - Pomodoro functionality (backend API exists; frontend timer integration is pending)
-- Profile persistence for development-auth users
+- Profile persistence for newly registered users
 
 Not yet implemented:
 - Complete Supabase database schema and generated models
@@ -57,6 +59,7 @@ Backend:
 - TypeScript
 - Route/controller/service organization
 - Auth service with development OTP and Supabase production fallback
+- Registration service that creates the user and persists the profile before returning success
 - Room and Pomodoro service layers
 - Authentication middleware for protected APIs
 
@@ -95,10 +98,13 @@ Pomodoro:
 ## Authentication Notes
 
 - Indian numbers are normalized to `+91XXXXXXXXXX` and must begin with 6-9.
-- In non-production environments, OTPs are generated randomly, displayed by the frontend for manual development entry, expire after five minutes, and are removed after successful verification.
-- Production authentication uses the Supabase OTP path configured by the backend.
+- Sign-up collects the user's full name and phone number, then calls `POST /api/auth/register`; it does not request or verify an OTP.
+- Registration creates a confirmed Supabase Auth user through the backend and upserts the corresponding `profiles` record. Existing phone numbers are rejected with a sign-in prompt.
+- After successful registration, the frontend redirects the user to `/signin`, where the normal OTP sign-in flow begins.
+- In non-production environments, sign-in OTPs are generated randomly, displayed by the frontend for manual development entry, expire after five minutes, and are removed after successful verification.
+- Production sign-in authentication uses the Supabase OTP path configured by the backend.
 - Frontend session data is stored in local storage and revalidated through `/api/auth/me`.
-- The current Supabase profile migration uses UUIDs referencing `auth.users`; development-only user IDs must be reconciled with that schema before relying on profile persistence in a deployed environment.
+- The Supabase profile migration uses UUIDs referencing `auth.users`; registration creates users through Supabase Auth so profile IDs remain compatible with this schema.
 
 ## Important Development Rule
 

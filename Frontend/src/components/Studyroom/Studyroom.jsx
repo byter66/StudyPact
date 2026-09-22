@@ -1,20 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
     completePomodoroSession,
     createPomodoroSession,
     updatePomodoroSession,
 } from '../../services/pomodoroApi';
-import { getRoomById } from '../../services/roomService';
+import { getRoomById, joinRoom, leaveRoom } from '../../services/roomService';
+import { supabase } from '../../services/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 import './StudyRoom.css';
-
-const MEMBERS = [
-    { id: 1, initial: 'R', name: 'Rahul', status: 'studying' },
-    { id: 2, initial: 'K', name: 'Kavya', status: 'studying' },
-    { id: 3, initial: 'S', name: 'Sanjay', status: 'break' },
-    { id: 4, initial: 'A', name: 'Anu', status: 'away' },
-    { id: 5, initial: 'D', name: 'Divya', status: 'studying' },
-];
 
 const STATUS_LABEL = {
     studying: 'Studying',
@@ -40,9 +34,14 @@ const FOCUS_MINUTES = 25;
 
 const StudyRoom = () => {
     const { roomId } = useParams();
+    const navigate = useNavigate();
+    const { user } = useAuth();
     const [room, setRoom] = useState(null);
     const [roomLoading, setRoomLoading] = useState(true);
     const [roomError, setRoomError] = useState('');
+    const [members, setMembers] = useState([]);
+    const [realtimeError, setRealtimeError] = useState('');
+    const [leaving, setLeaving] = useState(false);
 
     const [myStatus, setMyStatus] = useState('studying');
     const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
@@ -61,6 +60,7 @@ const StudyRoom = () => {
 
     useEffect(() => {
         let isCurrent = true;
+        let channel = null;
 
         const loadRoom = async () => {
             setRoomLoading(true);
@@ -68,14 +68,59 @@ const StudyRoom = () => {
 
             try {
                 const fetchedRoom = await getRoomById(roomId);
-                if (isCurrent) {
-                    setRoom({
-                        ...fetchedRoom,
-                        examTag: fetchedRoom.examCategory,
-                        title: fetchedRoom.name,
-                        isLive: false,
-                    });
+                await joinRoom(roomId);
+                if (!isCurrent) return;
+
+                setRoom({
+                    ...fetchedRoom,
+                    examTag: fetchedRoom.examCategory,
+                    title: fetchedRoom.name,
+                    isLive: true,
+                });
+
+                if (!supabase || !user?.id) {
+                    setRealtimeError('Realtime is not configured for this environment.');
+                    return;
                 }
+
+                channel = supabase.channel(`room-presence:${roomId}`, {
+                    config: { presence: { key: user.id } },
+                });
+
+                const syncPresence = () => {
+                    const seen = new Set();
+                    const activeMembers = [];
+                    Object.values(channel.presenceState()).flat().forEach((presence) => {
+                        if (!presence.user_id || seen.has(presence.user_id)) return;
+                        seen.add(presence.user_id);
+                        activeMembers.push({
+                            id: presence.user_id,
+                            name: presence.display_name || 'StudyPact member',
+                            status: 'studying',
+                        });
+                    });
+                    setMembers(activeMembers);
+                };
+
+                channel
+                    .on('presence', { event: 'sync' }, syncPresence)
+                    .on('presence', { event: 'join' }, syncPresence)
+                    .on('presence', { event: 'leave' }, syncPresence);
+
+                channel.subscribe(async (status) => {
+                    if (status === 'SUBSCRIBED') {
+                        const { error } = await channel.track({
+                            user_id: user.id,
+                            display_name: user.full_name || user.email || 'StudyPact member',
+                        });
+                        if (error && isCurrent) {
+                            setRealtimeError('Unable to announce your presence. Please retry.');
+                        }
+                        syncPresence();
+                    } else if (status === 'CHANNEL_ERROR' && isCurrent) {
+                        setRealtimeError('Realtime connection failed. Refresh to retry.');
+                    }
+                });
             } catch (error) {
                 if (isCurrent) {
                     setRoomError(error.message || 'Unable to load this room.');
@@ -96,8 +141,23 @@ const StudyRoom = () => {
 
         return () => {
             isCurrent = false;
+            if (channel) {
+                supabase?.removeChannel(channel);
+            }
         };
-    }, [roomId]);
+    }, [roomId, user]);
+
+    const handleLeaveRoom = async () => {
+        if (leaving) return;
+        setLeaving(true);
+        try {
+            await leaveRoom(roomId);
+            navigate('/dashboard');
+        } catch (error) {
+            setRoomError(error.message || 'Unable to leave this room. Please try again.');
+            setLeaving(false);
+        }
+    };
 
     const getFocusedDuration = () => {
         const runningSeconds = startedAtRef.current
@@ -295,6 +355,7 @@ const StudyRoom = () => {
                 <div className="sr-room-info">
                     <span className="sr-badge">{room.examTag}</span>
                     <h1 className="sr-room-title">{room.title}</h1>
+                    <span className="sr-room-code">Code: {room.roomCode}</span>
                     {room.isLive && (
                         <>
                             <span className="sr-live-dot" aria-hidden="true"></span>
@@ -303,7 +364,14 @@ const StudyRoom = () => {
                     )}
                 </div>
                 <div className="sr-topbar-actions">
-                    <Link to="/dashboard" className="sr-link-btn">Leave room</Link>
+                    <button
+                        type="button"
+                        className="sr-link-btn"
+                        onClick={handleLeaveRoom}
+                        disabled={leaving}
+                    >
+                        {leaving ? 'Leaving...' : 'Leave room'}
+                    </button>
                 </div>
             </header>
 
@@ -316,13 +384,16 @@ const StudyRoom = () => {
                         <span>You — {STATUS_LABEL[myStatus]}</span>
                     </button>
 
-                    <p className="sr-panel-label">Members ({MEMBERS.length})</p>
+                    <p className="sr-panel-label">Members ({members.length})</p>
+                    {realtimeError && <p className="sr-realtime-error" role="alert">{realtimeError}</p>}
                     <ul className="sr-member-list">
-                        {MEMBERS.map((m) => (
+                        {members.map((m) => (
                             <li key={m.id} className="sr-member">
-                                <span className="sr-avatar">{m.initial}</span>
+                                <span className="sr-avatar">{m.name.charAt(0).toUpperCase()}</span>
                                 <div className="sr-member-meta">
-                                    <span className="sr-member-name">{m.name}</span>
+                                    <span className="sr-member-name">
+                                        {m.name}{m.id === user?.id ? ' (You)' : ''}
+                                    </span>
                                     <span className="sr-member-status">
                                         <span className={`sr-status-dot sr-status-${m.status}`}></span>
                                         {STATUS_LABEL[m.status]}

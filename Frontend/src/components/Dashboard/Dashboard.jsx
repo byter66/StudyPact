@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RoomCard from "../RoomCard/RoomCard";
 import { useAuth } from "../../context/AuthContext";
+import { apiRequest } from "../../services/apiClient";
+import { joinRoom } from "../../services/roomService";
 import "./Dashboard.css";
 
 const MOCK_USER = { name: "Ananya", streak: 12, streakGoal: 14, rank: 8 };
@@ -157,30 +159,58 @@ export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [joiningRoomId, setJoiningRoomId] = useState(null);
+  const [roomError, setRoomError] = useState("");
 
   const toggleGoal = (id) => {
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
   };
 
-  const handleCreateRoom = ({ name, maxMembers, password }) => {
-    const creatorName = user?.full_name || MOCK_USER.name;
-    const newRoom = {
-      id: `r${Date.now()}`,
-      examTag: activeFilter === "All" ? "UPSC" : activeFilter,
-      title: name,
-      members: [creatorName],
-      activeMembers: [creatorName], // creator is presumed to be entering the room now
-      maxMembers,
-      hasPassword: Boolean(password),
-    };
-    setRooms((prev) => [newRoom, ...prev]);
-    setShowCreateModal(false);
+  const handleCreateRoom = async ({ name }) => {
+    try {
+      const result = await apiRequest("/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          examCategory: activeFilter === "All" ? "UPSC" : activeFilter,
+          description: "",
+        }),
+      });
+
+      const room = result.data;
+      const newRoom = {
+        id: room.id,
+        examTag: room.examCategory,
+        title: room.name,
+        members: [user?.full_name || MOCK_USER.name],
+        isLive: false,
+      };
+
+      setRooms((prev) => [newRoom, ...prev]);
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error("Unable to create room:", error);
+    }
   };
 
-  // Only show rooms that currently have at least one active member.
-  // A room with members but no one active right now is not shown here —
-  // it still exists in `rooms`/the backend, just not surfaced on the dashboard.
-  const liveRooms = rooms.filter((r) => (r.activeMembers?.length || 0) > 0);
+  const handleEnterRoom = async (room) => {
+    if (!UUID_PATTERN.test(room.id)) {
+      setRoomError("This room is not connected to a real backend room yet.");
+      return;
+    }
+
+    setRoomError("");
+    setJoiningRoomId(room.id);
+
+    try {
+      await joinRoom(room.id);
+      navigate(`/study-room/${room.id}`);
+    } catch (error) {
+      setRoomError(error.message || "Unable to join this room.");
+    } finally {
+      setJoiningRoomId(null);
+    }
+  };
 
   const visibleRooms =
     activeFilter === "All" ? liveRooms : liveRooms.filter((r) => r.examTag === activeFilter);
@@ -251,6 +281,18 @@ export default function Dashboard() {
             <button className="create-room-btn" onClick={() => setShowCreateModal(true)}>
               + Create room
             </button>
+            <form className="join-room-form" onSubmit={handleJoinByCode}>
+              <input
+                value={roomCode}
+                onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
+                placeholder="Room code"
+                aria-label="Room code"
+                maxLength={6}
+              />
+              <button className="btn btn-ghost" type="submit" disabled={joiningByCode}>
+                {joiningByCode ? "Joining..." : "Join"}
+              </button>
+            </form>
           </div>
 
           <div className="room-grid">

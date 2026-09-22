@@ -178,6 +178,23 @@
   flex-wrap: wrap;
 }
 
+.join-room-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.join-room-form input {
+  width: 112px;
+  border: 1px solid #e4ddce;
+  border-radius: 999px;
+  background: #fffdf8;
+  color: #211f1c;
+  padding: 9px 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
 .exam-pill-row {
   display: flex;
   gap: 8px;

@@ -48,6 +48,12 @@
     margin: 0;
 }
 
+.sr-room-code {
+    color: #6b6558;
+    font-size: 12px;
+    letter-spacing: 0.4px;
+}
+
 .sr-live-dot {
     width: 7px;
     height: 7px;
@@ -74,6 +80,11 @@
 
 .sr-link-btn:hover {
     background: #f1ebdd;
+}
+
+.sr-link-btn:disabled {
+    cursor: wait;
+    opacity: 0.65;
 }
 
 /* ---------- Body grid ---------- */
@@ -196,6 +207,12 @@
     display: flex;
     align-items: center;
     gap: 5px;
+}
+
+.sr-realtime-error {
+    color: #a8511f;
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 /* ---------- Focus panel (center) ---------- */
