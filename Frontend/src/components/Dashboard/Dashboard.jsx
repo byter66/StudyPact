@@ -166,29 +166,29 @@ export default function Dashboard() {
         isLive: false,
       };
 
-      const handleEnterRoom = async (room) => {
-        if (!UUID_PATTERN.test(room.id)) {
-          setRoomError("This room is not connected to a real backend room yet.");
-          return;
-        }
-
-        setRoomError("");
-        setJoiningRoomId(room.id);
-
-        try {
-          await joinRoom(room.id);
-          navigate(`/study-room/${room.id}`);
-        } catch (error) {
-          setRoomError(error.message || "Unable to join this room.");
-        } finally {
-          setJoiningRoomId(null);
-        }
-      };
-
       setRooms((prev) => [newRoom, ...prev]);
       setShowCreateModal(false);
     } catch (error) {
       console.error("Unable to create room:", error);
+    }
+  };
+
+  const handleEnterRoom = async (room) => {
+    if (!UUID_PATTERN.test(room.id)) {
+      setRoomError("This room is not connected to a real backend room yet.");
+      return;
+    }
+
+    setRoomError("");
+    setJoiningRoomId(room.id);
+
+    try {
+      await joinRoom(room.id);
+      navigate(`/study-room/${room.id}`);
+    } catch (error) {
+      setRoomError(error.message || "Unable to join this room.");
+    } finally {
+      setJoiningRoomId(null);
     }
   };
 

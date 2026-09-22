@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Signup.css';
 import { authService } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 
 const Signup = () => {
     const navigate = useNavigate();
+    const { setUser } = useAuth();
     const [fullName, setFullName] = useState('');
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
@@ -32,7 +34,7 @@ const Signup = () => {
 
         setLoading(true);
         try {
-            const result = await authService.requestOtp(cleanPhone, fullName.trim());
+            const result = await authService.requestOtp(cleanPhone, fullName.trim(), 'signup');
             setGeneratedOtp(result?.otp || '');
             setOtpSent(true);
         } catch (requestError) {
@@ -55,7 +57,7 @@ const Signup = () => {
         try {
             const result = await authService.verifyOtp(normalizePhone(phone), otp, fullName.trim());
             if (result?.user) {
-                window.alert('Successfully registered!');
+                setUser(result.user);
                 navigate('/dashboard');
             }
         } catch (verifyError) {
@@ -152,7 +154,9 @@ const Signup = () => {
                         {error && <p className="auth-error">{error}</p>}
 
                         <div className="signup-actions">
-                            <Link to="/dashboard" className="btn btn-primary">Login</Link>
+                            <button type="submit" className="btn btn-primary" disabled={loading}>
+                                {loading ? 'Please wait...' : otpSent ? 'Create account' : 'Send OTP'}
+                            </button>
                             <Link to="/signin" className="btn btn-outline">Sign in</Link>
                         </div>
                     </form>

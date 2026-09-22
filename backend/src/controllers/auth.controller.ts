@@ -7,9 +7,9 @@ export const requestOtpController = async (
   next: NextFunction
 ) => {
   try {
-    const { phone, fullName } = req.body ?? {};
+    const { phone, fullName, mode } = req.body ?? {};
 
-    const { data, error } = await requestOtp(phone, fullName);
+    const { data, error } = await requestOtp(phone, fullName, mode);
 
     if (error || !data) {
       return res.status(400).json({

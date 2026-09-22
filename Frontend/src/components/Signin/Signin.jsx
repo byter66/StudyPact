@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Signin.css';
 import { authService } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 
 const Signin = () => {
     const navigate = useNavigate();
+    const { setUser } = useAuth();
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [otpSent, setOtpSent] = useState(false);
@@ -26,7 +28,7 @@ const Signin = () => {
 
         setLoading(true);
         try {
-            const result = await authService.requestOtp(cleanPhone);
+            const result = await authService.requestOtp(cleanPhone, undefined, 'signin');
             setGeneratedOtp(result?.otp || '');
             setOtpSent(true);
         } catch (requestError) {
@@ -49,7 +51,7 @@ const Signin = () => {
         try {
             const result = await authService.verifyOtp(normalizePhone(phone), otp);
             if (result?.user) {
-                window.alert('Successfully signed in!');
+                setUser(result.user);
                 navigate('/dashboard');
             }
         } catch (verifyError) {

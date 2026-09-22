@@ -1,10 +1,10 @@
 import { apiRequest } from "./apiClient";
 
 export const authService = {
-  async requestOtp(phone, fullName) {
+  async requestOtp(phone, fullName, mode) {
     return apiRequest("/api/auth/send-otp", {
       method: "POST",
-      body: JSON.stringify({ phone, fullName }),
+      body: JSON.stringify({ phone, fullName, mode }),
     });
   },
 

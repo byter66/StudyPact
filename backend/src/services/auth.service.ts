@@ -141,13 +141,32 @@ const mapSupabaseUser = (user: any, fallbackFullName?: string | null) => {
   };
 };
 
-export const requestOtp = async (phone: string, fullName?: string) => {
+export const requestOtp = async (
+  phone: string,
+  fullName?: string,
+  mode: "signin" | "signup" = "signup"
+) => {
   const normalizedPhone = normalizeIndianPhone(phone);
 
   if (!normalizedPhone) {
     return {
       data: null,
       error: new Error("Enter a valid Indian mobile number."),
+    };
+  }
+
+  const existingUser = await findDevelopmentUserByPhone(normalizedPhone);
+  if (mode === "signin" && !existingUser) {
+    return {
+      data: null,
+      error: new Error("You are not registered yet. Please sign up first."),
+    };
+  }
+
+  if (mode === "signup" && existingUser) {
+    return {
+      data: null,
+      error: new Error("This phone number is already registered. Please sign in."),
     };
   }
 
@@ -175,9 +194,7 @@ export const requestOtp = async (phone: string, fullName?: string) => {
 
   const { error } = await supabase.auth.signInWithOtp({
     phone: normalizedPhone,
-    options: {
-      shouldCreateUser: true,
-    },
+    options: { shouldCreateUser: mode === "signup" },
   });
 
   if (error) {
@@ -219,10 +236,12 @@ export const verifyOtp = async (phone: string, token: string, fullName?: string)
       };
     }
 
-    const finalFullName = sanitizeProfileName(fullName);
     const supabaseUser = await getOrCreateDevelopmentUser(
       normalizedPhone,
-      finalFullName
+      sanitizeProfileName(fullName ?? undefined)
+    );
+    const finalFullName = sanitizeProfileName(
+      fullName ?? supabaseUser.user_metadata?.full_name ?? supabaseUser.user_metadata?.name
     );
 
     await saveProfile(
