@@ -5,7 +5,7 @@
 
 .dashboard-shell {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 200px 1fr;
   min-height: 100vh;
   background: #FAF6EF;
   color: #211F1C;
@@ -37,6 +37,9 @@
 .sidebar-icon {
   font-size: 16px;
   color: #6B6558;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .sidebar-avatar {
@@ -57,6 +60,20 @@
   font-weight: 600;
   color: #6B6558;
   text-align: center;
+}
+
+.sidebar-collapsed {
+  grid-template-columns: 72px 1fr;
+}
+
+.sidebar-collapsed .sidebar-rank,
+.sidebar-collapsed .sidebar-logout {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar-top,
+.sidebar-collapsed .sidebar-bottom {
+  gap: 16px;
 }
 
 .sidebar-bottom {
@@ -281,9 +298,6 @@
 
 .goal-hint {
   margin: 0;
-  font-size: 11px;
-  color: #6B6558;
-  font-style: italic;
 }
 
 .leaderboard-list {
@@ -329,12 +343,66 @@
   flex: 1;
 }
 
+.leaderboard-streak {
+  color: #6B6558;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .leaderboard-you {
   background: #FBEFE6;
 }
 
 .leaderboard-you .leaderboard-name {
   font-weight: 700;
+}
+
+.goal-add-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #C1602E;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.goal-add-button:hover,
+.goal-add-submit:hover {
+  color: #8B3A1F;
+}
+
+.goal-add-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.goal-add-form input {
+  flex: 1 1 180px;
+  min-width: 0;
+  border: 1px solid #EDE6D9;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #FDFBF7;
+  color: #211F1C;
+  font: inherit;
+  font-size: 12px;
+}
+
+.goal-add-submit,
+.goal-add-cancel {
+  border: none;
+  background: none;
+  color: #C1602E;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.goal-add-cancel {
+  color: #6B6558;
 }
 
 /* --- Create Room modal --- */
@@ -452,6 +520,10 @@
 /* Mobile — collapse sidebar into a slide-out menu, stack everything */
 @media (max-width: 640px) {
   .dashboard-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
   }
 
