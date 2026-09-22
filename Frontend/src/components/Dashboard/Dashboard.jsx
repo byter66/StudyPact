@@ -56,12 +56,15 @@ const MOCK_GOALS = [
   { id: "g3", text: "30 min current affairs", done: false },
 ];
 
-function StreakRing({ value, goal }) {
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function DailyProgressRing({ streak, completed, total }) {
   const size = 52;
   const stroke = 4;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = Math.min(value / goal, 1);
+  const progress = total > 0 ? Math.min(completed / total, 1) : 0;
   const offset = circumference * (1 - progress);
 
   return (
@@ -82,14 +85,10 @@ function StreakRing({ value, goal }) {
         />
       </svg>
       <div className="streak-ring-label">
-        <span className="streak-ring-number">{value}</span>
+        <span className="streak-ring-number">{streak}</span>
       </div>
     </div>
   );
-}
-
-function Avatar({ name }) {
-  return <span className="avatar-icon">{name.charAt(0).toUpperCase()}</span>;
 }
 
 function CreateRoomModal({ onClose, onCreate }) {
@@ -160,7 +159,9 @@ export default function Dashboard() {
   const [rooms, setRooms] = useState(MOCK_ROOMS);
   const [activeFilter, setActiveFilter] = useState("All");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showAddGoal, setShowAddGoal] = useState(false);
+  const [newGoalText, setNewGoalText] = useState("");
   const [joiningRoomId, setJoiningRoomId] = useState(null);
   const [roomCode, setRoomCode] = useState("");
   const [joiningByCode, setJoiningByCode] = useState(false);
@@ -168,6 +169,20 @@ export default function Dashboard() {
 
   const toggleGoal = (id) => {
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
+  };
+
+  const addGoal = (event) => {
+    event.preventDefault();
+    const text = newGoalText.trim();
+
+    if (!text) return;
+
+    setGoals((prev) => [
+      ...prev,
+      { id: `g${Date.now()}`, text, done: false },
+    ]);
+    setNewGoalText("");
+    setShowAddGoal(false);
   };
 
   const handleCreateRoom = async ({ name }) => {
@@ -243,18 +258,24 @@ export default function Dashboard() {
   const displayName = user?.full_name || MOCK_USER.name;
 
   return (
-    <div className={`dashboard-shell ${menuOpen ? "sidebar-open" : ""}`}>
+    <div className={`dashboard-shell ${sidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}>
       <button
         className="mobile-menu-btn"
         aria-label="Toggle menu"
-        onClick={() => setMenuOpen((v) => !v)}
+        onClick={() => setSidebarOpen((v) => !v)}
       >
         ☰
       </button>
 
       <aside className="dashboard-sidebar-nav">
         <div className="sidebar-top">
-          <span className="sidebar-icon sidebar-menu" aria-hidden="true">☰</span>
+          <button
+            className="sidebar-icon sidebar-menu"
+            aria-label="Toggle sidebar"
+            onClick={() => setSidebarOpen((v) => !v)}
+          >
+            ☰
+          </button>
           <span className="sidebar-avatar" title={displayName}>
             {displayName.charAt(0).toUpperCase()}
           </span>
@@ -281,7 +302,11 @@ export default function Dashboard() {
             <p className="dashboard-eyebrow">Welcome back</p>
             <h1 className="dashboard-greeting">{displayName}</h1>
           </div>
-          <StreakRing value={MOCK_USER.streak} goal={MOCK_USER.streakGoal} />
+          <DailyProgressRing
+            streak={MOCK_USER.streak}
+            completed={completedCount}
+            total={goals.length}
+          />
         </header>
 
         <section className="dashboard-rooms-section">
@@ -355,7 +380,37 @@ export default function Dashboard() {
                 </li>
               ))}
             </ul>
-            <p className="goal-hint">Checklist items are what count toward streak completion.</p>
+            {showAddGoal ? (
+              <form className="goal-add-form" onSubmit={addGoal}>
+                <input
+                  type="text"
+                  value={newGoalText}
+                  onChange={(event) => setNewGoalText(event.target.value)}
+                  placeholder="Enter a daily goal"
+                  aria-label="New daily goal"
+                  autoFocus
+                />
+                <button type="submit" className="goal-add-submit">Add</button>
+                <button
+                  type="button"
+                  className="goal-add-cancel"
+                  onClick={() => {
+                    setNewGoalText("");
+                    setShowAddGoal(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="goal-add-button"
+                onClick={() => setShowAddGoal(true)}
+              >
+                + Add goal
+              </button>
+            )}
           </div>
 
           <div className="dashboard-card">
@@ -367,8 +422,8 @@ export default function Dashboard() {
                   className={`leaderboard-item ${entry.name === "You" ? "leaderboard-you" : ""}`}
                 >
                   <span className="leaderboard-rank">{i + 1}</span>
-                  <Avatar name={entry.name} />
-                  <span className="leaderboard-name">Streak day {entry.streak}</span>
+                  <span className="leaderboard-name">{entry.name}</span>
+                  <span className="leaderboard-streak">🔥 {entry.streak} days</span>
                 </li>
               ))}
             </ul>
