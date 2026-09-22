@@ -15,6 +15,11 @@ export interface CreateRoomInput {
   creatorUserId: string;
 }
 
+export interface JoinRoomResult {
+  room: Room;
+  alreadyMember: boolean;
+}
+
 export interface RoomRow {
   id: string;
   name: string;

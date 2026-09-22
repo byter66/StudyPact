@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RoomCard from "../RoomCard/RoomCard";
 import { useAuth } from "../../context/AuthContext";
+import { apiRequest } from "../../services/apiClient";
+import { joinRoom } from "../../services/roomService";
 import "./Dashboard.css";
 
 // --- Mock data. Swap for real Supabase shapes once Niveditha/Mahima confirm the schema. ---
@@ -28,6 +30,9 @@ const MOCK_GOALS = [
   { id: "g2", text: "Solve 1 mock doubt", done: false },
   { id: "g3", text: "30 min current affairs", done: false },
 ];
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function StreakRing({ value, goal }) {
   const size = 52;
@@ -134,23 +139,57 @@ export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [joiningRoomId, setJoiningRoomId] = useState(null);
+  const [roomError, setRoomError] = useState("");
 
   const toggleGoal = (id) => {
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
   };
 
-  const handleCreateRoom = ({ name, maxMembers, password }) => {
-    const newRoom = {
-      id: `r${Date.now()}`,
-      examTag: activeFilter === "All" ? "UPSC" : activeFilter,
-      title: name,
-      members: [user?.full_name || MOCK_USER.name],
-      isLive: true,
-      maxMembers,
-      hasPassword: Boolean(password),
-    };
-    setRooms((prev) => [newRoom, ...prev]);
-    setShowCreateModal(false);
+  const handleCreateRoom = async ({ name }) => {
+    try {
+      const result = await apiRequest("/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          examCategory: activeFilter === "All" ? "UPSC" : activeFilter,
+          description: "",
+        }),
+      });
+
+      const room = result.data;
+      const newRoom = {
+        id: room.id,
+        examTag: room.examCategory,
+        title: room.name,
+        members: [user?.full_name || MOCK_USER.name],
+        isLive: false,
+      };
+
+      const handleEnterRoom = async (room) => {
+        if (!UUID_PATTERN.test(room.id)) {
+          setRoomError("This room is not connected to a real backend room yet.");
+          return;
+        }
+
+        setRoomError("");
+        setJoiningRoomId(room.id);
+
+        try {
+          await joinRoom(room.id);
+          navigate(`/study-room/${room.id}`);
+        } catch (error) {
+          setRoomError(error.message || "Unable to join this room.");
+        } finally {
+          setJoiningRoomId(null);
+        }
+      };
+
+      setRooms((prev) => [newRoom, ...prev]);
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error("Unable to create room:", error);
+    }
   };
 
   const visibleRooms =
@@ -224,9 +263,20 @@ export default function Dashboard() {
             </button>
           </div>
 
+          {roomError && (
+            <p role="alert" className="dashboard-empty">
+              {roomError}
+            </p>
+          )}
+
           <div className="room-grid">
             {visibleRooms.map((room) => (
-              <RoomCard key={room.id} room={room} onEnter={() => navigate(`/study-room/${room.id}`)} />
+              <RoomCard
+                key={room.id}
+                room={room}
+                disabled={joiningRoomId === room.id}
+                onEnter={handleEnterRoom}
+              />
             ))}
             {visibleRooms.length === 0 && (
               <p className="dashboard-empty">No rooms yet for {activeFilter}. Start one above.</p>

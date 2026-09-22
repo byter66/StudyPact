@@ -5,16 +5,8 @@ import {
     createPomodoroSession,
     updatePomodoroSession,
 } from '../../services/pomodoroApi';
+import { getRoomById } from '../../services/roomService';
 import './StudyRoom.css';
-
-// Should match the same rooms your Dashboard renders.
-// Swap for a real fetch (Supabase) once backend is ready.
-const ROOMS_BY_ID = {
-    r1: { examTag: 'UPSC', title: 'Prelims Revision Pact', isLive: true },
-    r2: { examTag: 'GATE', title: 'CS Core Subjects', isLive: false },
-    r3: { examTag: 'NEET', title: 'Biology Daily Grind', isLive: true },
-    r4: { examTag: 'JEE', title: 'Physics Problem Set', isLive: false },
-};
 
 const MEMBERS = [
     { id: 1, initial: 'R', name: 'Rahul', status: 'studying' },
@@ -47,8 +39,10 @@ const GOALS = [
 const FOCUS_MINUTES = 25;
 
 const StudyRoom = () => {
-    const { id } = useParams();
-    const room = ROOMS_BY_ID[id] || { examTag: 'UPSC', title: 'Study Room', isLive: false };
+    const { roomId } = useParams();
+    const [room, setRoom] = useState(null);
+    const [roomLoading, setRoomLoading] = useState(true);
+    const [roomError, setRoomError] = useState('');
 
     const [myStatus, setMyStatus] = useState('studying');
     const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
@@ -64,6 +58,46 @@ const StudyRoom = () => {
     const startedAtRef = useRef(null);
     const operationInProgressRef = useRef(false);
     const completionAttemptedRef = useRef(false);
+
+    useEffect(() => {
+        let isCurrent = true;
+
+        const loadRoom = async () => {
+            setRoomLoading(true);
+            setRoomError('');
+
+            try {
+                const fetchedRoom = await getRoomById(roomId);
+                if (isCurrent) {
+                    setRoom({
+                        ...fetchedRoom,
+                        examTag: fetchedRoom.examCategory,
+                        title: fetchedRoom.name,
+                        isLive: false,
+                    });
+                }
+            } catch (error) {
+                if (isCurrent) {
+                    setRoomError(error.message || 'Unable to load this room.');
+                }
+            } finally {
+                if (isCurrent) {
+                    setRoomLoading(false);
+                }
+            }
+        };
+
+        if (!roomId) {
+            setRoomError('A room ID is required.');
+            setRoomLoading(false);
+        } else {
+            loadRoom();
+        }
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [roomId]);
 
     const getFocusedDuration = () => {
         const runningSeconds = startedAtRef.current
@@ -171,7 +205,7 @@ const StudyRoom = () => {
                 });
             } else {
                 const session = await createPomodoroSession(
-                    id,
+                    roomId,
                     FOCUS_MINUTES * 60,
                 );
                 currentSessionId = session.id;
@@ -235,6 +269,23 @@ const StudyRoom = () => {
 
     const completedGoals = GOALS.filter((g) => g.done).length;
     const progressPercent = (FOCUS_MINUTES * 60 - secondsLeft) / (FOCUS_MINUTES * 60) * 100;
+
+    if (roomLoading) {
+        return (
+            <div className="sr-page">
+                <p role="status">Loading room...</p>
+            </div>
+        );
+    }
+
+    if (roomError || !room) {
+        return (
+            <div className="sr-page">
+                <p role="alert">{roomError || 'Room not found.'}</p>
+                <Link to="/dashboard" className="sr-link-btn">Back to dashboard</Link>
+            </div>
+        );
+    }
 
     return (
         <div className="sr-page">
@@ -318,7 +369,7 @@ const StudyRoom = () => {
                     )}
 
                     <div className="sr-quick-row">
-                        <Link to={`/mock-room/${id}`} className="sr-quick-card">
+                        <Link to={`/mock-room/${roomId}`} className="sr-quick-card">
                             <span className="sr-quick-title">Create Mock Room</span>
                             <span className="sr-quick-sub">Timed practice + peer review</span>
                         </Link>
@@ -342,7 +393,7 @@ const StudyRoom = () => {
 
                 {/* Right: chat + doubt forum */}
                 <aside className="sr-panel sr-side-panel">
-                    <Link to={`/doubt-forum/${id}`} className="sr-doubt-entry">
+                    <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry">
                         <span className="sr-doubt-icon">💬</span>
                         <div>
                             <span className="sr-doubt-title">Doubt Forum</span>

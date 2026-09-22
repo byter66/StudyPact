@@ -11,11 +11,16 @@ const EXAM_STYLES = {
   SSC: { label: "SSC", tint: "tint-f" },
 };
 
-export default function RoomCard({ room, onEnter }) {
+export default function RoomCard({ room, onEnter, disabled = false }) {
   const exam = EXAM_STYLES[room.examTag] || { label: room.examTag, tint: "tint-a" };
 
   return (
-    <button className={`room-card ${exam.tint}`} onClick={() => onEnter?.(room)}>
+    <button
+      className={`room-card ${exam.tint}`}
+      aria-label={`Join room ${room.title}`}
+      disabled={disabled}
+      onClick={() => onEnter?.(room)}
+    >
       <div className="room-card-top">
         <span className="room-card-tag">{exam.label}</span>
         {room.isLive && <span className="room-card-live">● Live</span>}

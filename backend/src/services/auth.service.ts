@@ -36,10 +36,7 @@ const decodeDevToken = (token: string) => {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const getOrCreateDevelopmentUser = async (
-  phone: string,
-  fullName: string
-) => {
+const findDevelopmentUserByPhone = async (phone: string) => {
   for (let page = 1; ; page += 1) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({
       page,
@@ -50,7 +47,11 @@ const getOrCreateDevelopmentUser = async (
       throw new Error(`Unable to look up the Supabase user: ${error.message}`);
     }
 
-    const existingUser = data.users.find((user) => user.phone === phone);
+    const existingUser = data.users.find((user) => {
+      const normalizedUserPhone = normalizeIndianPhone(user.phone ?? undefined);
+      return normalizedUserPhone === phone;
+    });
+
     if (existingUser) {
       return existingUser;
     }
@@ -58,6 +59,19 @@ const getOrCreateDevelopmentUser = async (
     if (data.users.length < 100) {
       break;
     }
+  }
+
+  return null;
+};
+
+const getOrCreateDevelopmentUser = async (
+  phone: string,
+  fullName: string
+) => {
+  const existingUser = await findDevelopmentUserByPhone(phone);
+
+  if (existingUser) {
+    return existingUser;
   }
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -70,6 +84,14 @@ const getOrCreateDevelopmentUser = async (
   });
 
   if (error || !data.user) {
+    if (error?.message.toLowerCase().includes("phone number already registered")) {
+      const registeredUser = await findDevelopmentUserByPhone(phone);
+
+      if (registeredUser) {
+        return registeredUser;
+      }
+    }
+
     throw new Error(`Unable to create the Supabase user: ${error?.message ?? "Unknown error."}`);
   }
 

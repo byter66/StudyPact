@@ -25,10 +25,10 @@ function App() {
           }
         />
         <Route
-          path="/study-room/:id"
+          path="/study-room/:roomId"
           element={
             <ProtectedRoute>
-              <StudyRoom />
+              <Studyroom />
             </ProtectedRoute>
           }
         />
@@ -40,8 +40,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/study-room/:id" element={<Studyroom />} />
         <Route path="/mock-room/:id" element={<Mockroom />} />
         <Route path="/doubt-forum/:id" element={<Doubtforum />} />
       </Routes>
