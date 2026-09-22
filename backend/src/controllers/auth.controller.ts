@@ -51,8 +51,7 @@ export const registerController = async (
       success: true,
       message: data.message,
       phone: data.phone,
-      otp: data.otp,
-      devMode: data.devMode,
+      fullName: data.fullName,
     });
   } catch (error) {
     return next(error);

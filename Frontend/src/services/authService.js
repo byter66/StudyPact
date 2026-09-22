@@ -1,6 +1,13 @@
 import { apiRequest } from "./apiClient";
 
 export const authService = {
+  async register(phone, fullName) {
+    return apiRequest("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ phone, fullName }),
+    });
+  },
+
   async requestOtp(phone, fullName, mode) {
     return apiRequest("/api/auth/send-otp", {
       method: "POST",

@@ -2,22 +2,17 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Signup.css';
 import { authService } from '../../services/authService';
-import { useAuth } from '../../context/AuthContext';
 
 const Signup = () => {
     const navigate = useNavigate();
-    const { setUser } = useAuth();
     const [fullName, setFullName] = useState('');
     const [phone, setPhone] = useState('');
-    const [otp, setOtp] = useState('');
-    const [otpSent, setOtpSent] = useState(false);
-    const [generatedOtp, setGeneratedOtp] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const normalizePhone = (value) => value.replace(/\D/g, '').slice(0, 10);
 
-    const handleRequestOtp = async (event) => {
+    const handleCreateAccount = async (event) => {
         event.preventDefault();
         setError('');
 
@@ -34,34 +29,10 @@ const Signup = () => {
 
         setLoading(true);
         try {
-            const result = await authService.requestOtp(cleanPhone, fullName.trim(), 'signup');
-            setGeneratedOtp(result?.otp || '');
-            setOtpSent(true);
-        } catch (requestError) {
-            setError(requestError.message || 'Unable to send OTP.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleVerifyOtp = async (event) => {
-        event.preventDefault();
-        setError('');
-
-        if (!/^\d{6}$/.test(otp)) {
-            setError('Enter the 6-digit OTP sent to your phone number.');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const result = await authService.verifyOtp(normalizePhone(phone), otp, fullName.trim());
-            if (result?.user) {
-                setUser(result.user);
-                navigate('/dashboard');
-            }
-        } catch (verifyError) {
-            setError(verifyError.message || 'OTP verification failed.');
+            await authService.register(cleanPhone, fullName.trim());
+            navigate('/signin');
+        } catch (registrationError) {
+            setError(registrationError.message || 'Unable to create your account.');
         } finally {
             setLoading(false);
         }
@@ -105,7 +76,7 @@ const Signup = () => {
                     <h2 className="form-title">Get started</h2>
                     <p className="form-subtitle">Create an account using your phone number.</p>
 
-                    <form className="signup-form" onSubmit={otpSent ? handleVerifyOtp : handleRequestOtp}>
+                    <form className="signup-form" onSubmit={handleCreateAccount}>
                         <label className="field-label" htmlFor="fullName">Full name</label>
                         <input
                             id="fullName"
@@ -126,36 +97,11 @@ const Signup = () => {
                             maxLength={10}
                         />
 
-                        {otpSent && (
-                            <>
-                                {generatedOtp && (
-                                    <p className="dev-otp-notice">
-                                        Your development OTP is <strong>{generatedOtp}</strong>
-                                    </p>
-                                )}
-                                <label className="field-label" htmlFor="otp">OTP</label>
-                                <input
-                                    id="otp"
-                                    type="text"
-                                    value={otp}
-                                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    className="field-input"
-                                    inputMode="numeric"
-                                    maxLength={6}
-                                />
-                            </>
-                        )}
-
-                        <p className="otp-note">
-                            <span className="otp-icon">🛡</span>
-                            One-time OTP verification for Indian users only.
-                        </p>
-
                         {error && <p className="auth-error">{error}</p>}
 
                         <div className="signup-actions">
                             <button type="submit" className="btn btn-primary" disabled={loading}>
-                                {loading ? 'Please wait...' : otpSent ? 'Create account' : 'Send OTP'}
+                                {loading ? 'Please wait...' : 'Create'}
                             </button>
                             <Link to="/signin" className="btn btn-outline">Sign in</Link>
                         </div>

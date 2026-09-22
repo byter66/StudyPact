@@ -306,7 +306,42 @@ export const verifyOtp = async (phone: string, token: string, fullName?: string)
 };
 
 export const registerUser = async (phone: string, fullName?: string) => {
-  return requestOtp(phone, fullName);
+  const normalizedPhone = normalizeIndianPhone(phone);
+  const sanitizedName = sanitizeProfileName(fullName);
+
+  if (!normalizedPhone) {
+    return {
+      data: null,
+      error: new Error("Enter a valid Indian mobile number."),
+    };
+  }
+
+  const existingUser = await findDevelopmentUserByPhone(normalizedPhone);
+  if (existingUser) {
+    return {
+      data: null,
+      error: new Error("This phone number is already registered. Please sign in."),
+    };
+  }
+
+  try {
+    const user = await getOrCreateDevelopmentUser(normalizedPhone, sanitizedName);
+    await saveProfile(user.id, sanitizedName, normalizedPhone, user.email);
+
+    return {
+      data: {
+        phone: normalizedPhone,
+        fullName: sanitizedName,
+        message: "Account created successfully.",
+      },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error : new Error("Unable to register user."),
+    };
+  }
 };
 
 export const loginUser = async (phone: string, otp: string, fullName?: string) => {
