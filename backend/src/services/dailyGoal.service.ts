@@ -1,5 +1,5 @@
 import { supabase } from "../config/supabase";
-import { DailyGoal } from "../types/accountability.types";
+import { CommitmentPlan, DailyGoal } from "../types/accountability.types";
 import {
   CreateDailyGoalInput,
   DailyGoalRow,
@@ -179,4 +179,73 @@ export const completeTodayDailyGoal = async (
   }
 
   return toDailyGoal(data as DailyGoalRow);
+};
+
+const getPreviousDate = (date: string): string => {
+  const previousDate = new Date(`${date}T00:00:00.000Z`);
+  previousDate.setUTCDate(previousDate.getUTCDate() - 1);
+  return previousDate.toISOString().slice(0, 10);
+};
+
+const groupGoalsByDate = (
+  rows: DailyGoalRow[]
+): Map<string, DailyGoal[]> => {
+  const goalsByDate = new Map<string, DailyGoal[]>();
+
+  for (const row of rows) {
+    const goals = goalsByDate.get(row.goal_date) ?? [];
+    goals.push(toDailyGoal(row));
+    goalsByDate.set(row.goal_date, goals);
+  }
+
+  return goalsByDate;
+};
+
+const isCompletedDay = (
+  userId: string,
+  roomId: string,
+  goals: DailyGoal[] | undefined
+): boolean => {
+  if (!goals || goals.length === 0) {
+    return false;
+  }
+
+  const commitmentPlan = new CommitmentPlan(
+    userId,
+    goals
+  );
+
+  return commitmentPlan.getProgress() === 1 &&
+    goals.every((goal) => goal.roomId === roomId);
+};
+
+export const getCurrentStreak = async (
+  roomId: string,
+  userId: string
+): Promise<number> => {
+  await requireRoomMembership(roomId, userId);
+
+  const today = getToday();
+  const { data, error } = await supabase
+    .from("daily_goals")
+    .select(DAILY_GOAL_COLUMNS)
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .lte("goal_date", today)
+    .order("goal_date", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  const goalsByDate = groupGoalsByDate((data ?? []) as DailyGoalRow[]);
+  let currentDate = today;
+  let streak = 0;
+
+  while (isCompletedDay(userId, roomId, goalsByDate.get(currentDate))) {
+    streak += 1;
+    currentDate = getPreviousDate(currentDate);
+  }
+
+  return streak;
 };

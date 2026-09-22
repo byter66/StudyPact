@@ -2,6 +2,7 @@ import { Response } from "express";
 import {
   completeTodayDailyGoal,
   createTodayDailyGoal,
+  getCurrentStreak,
   updateTodayDailyGoal,
 } from "../services/dailyGoal.service";
 import {
@@ -133,6 +134,33 @@ export const postCompleteDailyGoal = async (
   try {
     const goal = await completeTodayDailyGoal(roomId, userId);
     res.status(200).json({ success: true, data: goal });
+  } catch (error) {
+    if (!handleServiceError(error, res)) {
+      throw error;
+    }
+  }
+};
+
+export const getDailyGoalStreak = async (
+  req: AuthenticatedDailyGoalRequest,
+  res: Response
+) => {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+
+  const { roomId } = req.params;
+
+  if (typeof roomId !== "string" || !UUID_PATTERN.test(roomId)) {
+    res.status(400).json({ success: false, message: "Invalid room ID" });
+    return;
+  }
+
+  try {
+    const streak = await getCurrentStreak(roomId, userId);
+    res.status(200).json({
+      success: true,
+      data: { streak },
+    });
   } catch (error) {
     if (!handleServiceError(error, res)) {
       throw error;

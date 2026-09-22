@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getDailyGoalStreak,
   patchDailyGoal,
   postCompleteDailyGoal,
   postDailyGoal,
@@ -14,6 +15,11 @@ router.post(
   "/rooms/:roomId/daily-goal/complete",
   requireAuth,
   postCompleteDailyGoal
+);
+router.get(
+  "/rooms/:roomId/streak",
+  requireAuth,
+  getDailyGoalStreak
 );
 
 export default router;
