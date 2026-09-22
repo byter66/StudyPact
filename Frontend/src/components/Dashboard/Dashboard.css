@@ -195,6 +195,12 @@
   text-transform: uppercase;
 }
 
+.dashboard-room-error {
+  color: #a33a2b;
+  font-size: 13px;
+  margin: 10px 0 0;
+}
+
 .exam-pill-row {
   display: flex;
   gap: 8px;

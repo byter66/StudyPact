@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import RoomCard from "../RoomCard/RoomCard";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../services/apiClient";
-import { joinRoom } from "../../services/roomService";
+import { getRoomByCode, joinRoom } from "../../services/roomService";
 import "./Dashboard.css";
 
 const MOCK_USER = { name: "Ananya", streak: 12, streakGoal: 14, rank: 8 };
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const EXAM_FILTERS = ["All", "UPSC", "JEE", "NEET", "GATE"];
 
@@ -160,6 +162,8 @@ export default function Dashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [joiningRoomId, setJoiningRoomId] = useState(null);
+  const [roomCode, setRoomCode] = useState("");
+  const [joiningByCode, setJoiningByCode] = useState(false);
   const [roomError, setRoomError] = useState("");
 
   const toggleGoal = (id) => {
@@ -212,6 +216,26 @@ export default function Dashboard() {
     }
   };
 
+  const handleJoinByCode = async (event) => {
+    event.preventDefault();
+    const code = roomCode.trim();
+    if (!code) return;
+
+    setRoomError("");
+    setJoiningByCode(true);
+
+    try {
+      const room = await getRoomByCode(code);
+      await handleEnterRoom(room);
+      setRoomCode("");
+    } catch (error) {
+      setRoomError(error.message || "Unable to find this room.");
+    } finally {
+      setJoiningByCode(false);
+    }
+  };
+
+  const liveRooms = rooms.filter((room) => room.activeMembers?.length > 0);
   const visibleRooms =
     activeFilter === "All" ? liveRooms : liveRooms.filter((r) => r.examTag === activeFilter);
 
@@ -294,10 +318,20 @@ export default function Dashboard() {
               </button>
             </form>
           </div>
+          {roomError && (
+            <p className="dashboard-room-error" role="alert">
+              {roomError}
+            </p>
+          )}
 
           <div className="room-grid">
             {visibleRooms.map((room) => (
-              <RoomCard key={room.id} room={room} onEnter={() => navigate(`/study-room/${room.id}`)} />
+              <RoomCard
+                key={room.id}
+                room={room}
+                onEnter={handleEnterRoom}
+                disabled={joiningRoomId === room.id}
+              />
             ))}
             {visibleRooms.length === 0 && (
               <p className="dashboard-empty">No rooms yet for {activeFilter}. Start one above.</p>
