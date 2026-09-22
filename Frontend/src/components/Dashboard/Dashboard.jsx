@@ -2,20 +2,41 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RoomCard from "../RoomCard/RoomCard";
 import { useAuth } from "../../context/AuthContext";
-import { apiRequest } from "../../services/apiClient";
-import { joinRoom } from "../../services/roomService";
 import "./Dashboard.css";
 
-// --- Mock data. Swap for real Supabase shapes once Niveditha/Mahima confirm the schema. ---
 const MOCK_USER = { name: "Ananya", streak: 12, streakGoal: 14, rank: 8 };
 
 const EXAM_FILTERS = ["All", "UPSC", "JEE", "NEET", "GATE"];
 
 const MOCK_ROOMS = [
-  { id: "r1", examTag: "UPSC", title: "Prelims Revision Pact", members: ["Riya", "Karan", "Sana"], isLive: true },
-  { id: "r2", examTag: "GATE", title: "CS Core Subjects", members: ["Arjun", "Divya"], isLive: false },
-  { id: "r3", examTag: "NEET", title: "Biology Daily Grind", members: ["Meera", "Faisal", "Om", "Priya", "Tara"], isLive: true },
-  { id: "r4", examTag: "JEE", title: "Physics Problem Set", members: ["Nikhil"], isLive: false },
+  {
+    id: "r1",
+    examTag: "UPSC",
+    title: "Prelims Revision Pact",
+    members: ["Riya", "Karan", "Sana"],
+    activeMembers: ["Riya", "Karan", "Sana"],
+  },
+  {
+    id: "r2",
+    examTag: "GATE",
+    title: "CS Core Subjects",
+    members: ["Arjun", "Divya"],
+    activeMembers: ["Arjun", "Divya"],
+  },
+  {
+    id: "r3",
+    examTag: "NEET",
+    title: "Biology Daily Grind",
+    members: ["Meera", "Faisal", "Om", "Priya", "Tara"],
+    activeMembers: ["Meera", "Om"],
+  },
+  {
+    id: "r4",
+    examTag: "JEE",
+    title: "Physics Problem Set",
+    members: ["Nikhil"],
+    activeMembers: [],
+  },
 ];
 
 const MOCK_LEADERBOARD = [
@@ -31,15 +52,12 @@ const MOCK_GOALS = [
   { id: "g3", text: "30 min current affairs", done: false },
 ];
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function DailyProgressRing({ streak, completed, total }) {
+function StreakRing({ value, goal }) {
   const size = 52;
   const stroke = 4;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = total > 0 ? Math.min(completed / total, 1) : 0;
+  const progress = Math.min(value / goal, 1);
   const offset = circumference * (1 - progress);
 
   return (
@@ -60,10 +78,14 @@ function DailyProgressRing({ streak, completed, total }) {
         />
       </svg>
       <div className="streak-ring-label">
-        <span className="streak-ring-number">{streak}</span>
+        <span className="streak-ring-number">{value}</span>
       </div>
     </div>
   );
+}
+
+function Avatar({ name }) {
+  return <span className="avatar-icon">{name.charAt(0).toUpperCase()}</span>;
 }
 
 function CreateRoomModal({ onClose, onCreate }) {
@@ -134,101 +156,51 @@ export default function Dashboard() {
   const [rooms, setRooms] = useState(MOCK_ROOMS);
   const [activeFilter, setActiveFilter] = useState("All");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showAddGoal, setShowAddGoal] = useState(false);
-  const [newGoalText, setNewGoalText] = useState("");
-  const [joiningRoomId, setJoiningRoomId] = useState(null);
-  const [roomError, setRoomError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const toggleGoal = (id) => {
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
   };
 
-  const addGoal = (event) => {
-    event.preventDefault();
-    const text = newGoalText.trim();
-
-    if (!text) return;
-
-    setGoals((prev) => [
-      ...prev,
-      { id: `g${Date.now()}`, text, done: false },
-    ]);
-    setNewGoalText("");
-    setShowAddGoal(false);
+  const handleCreateRoom = ({ name, maxMembers, password }) => {
+    const creatorName = user?.full_name || MOCK_USER.name;
+    const newRoom = {
+      id: `r${Date.now()}`,
+      examTag: activeFilter === "All" ? "UPSC" : activeFilter,
+      title: name,
+      members: [creatorName],
+      activeMembers: [creatorName], // creator is presumed to be entering the room now
+      maxMembers,
+      hasPassword: Boolean(password),
+    };
+    setRooms((prev) => [newRoom, ...prev]);
+    setShowCreateModal(false);
   };
 
-  const handleCreateRoom = async ({ name }) => {
-    try {
-      const result = await apiRequest("/api/rooms", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          examCategory: activeFilter === "All" ? "UPSC" : activeFilter,
-          description: "",
-        }),
-      });
-
-      const room = result.data;
-      const newRoom = {
-        id: room.id,
-        examTag: room.examCategory,
-        title: room.name,
-        members: [user?.full_name || MOCK_USER.name],
-        isLive: false,
-      };
-
-      setRooms((prev) => [newRoom, ...prev]);
-      setShowCreateModal(false);
-    } catch (error) {
-      console.error("Unable to create room:", error);
-    }
-  };
-
-  const handleEnterRoom = async (room) => {
-    if (!UUID_PATTERN.test(room.id)) {
-      setRoomError("This room is not connected to a real backend room yet.");
-      return;
-    }
-
-    setRoomError("");
-    setJoiningRoomId(room.id);
-
-    try {
-      await joinRoom(room.id);
-      navigate(`/study-room/${room.id}`);
-    } catch (error) {
-      setRoomError(error.message || "Unable to join this room.");
-    } finally {
-      setJoiningRoomId(null);
-    }
-  };
+  // Only show rooms that currently have at least one active member.
+  // A room with members but no one active right now is not shown here —
+  // it still exists in `rooms`/the backend, just not surfaced on the dashboard.
+  const liveRooms = rooms.filter((r) => (r.activeMembers?.length || 0) > 0);
 
   const visibleRooms =
-    activeFilter === "All" ? rooms : rooms.filter((r) => r.examTag === activeFilter);
+    activeFilter === "All" ? liveRooms : liveRooms.filter((r) => r.examTag === activeFilter);
 
   const completedCount = goals.filter((g) => g.done).length;
   const displayName = user?.full_name || MOCK_USER.name;
 
   return (
-    <div className={`dashboard-shell ${sidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}>
+    <div className={`dashboard-shell ${menuOpen ? "sidebar-open" : ""}`}>
       <button
         className="mobile-menu-btn"
         aria-label="Toggle menu"
-        onClick={() => setSidebarOpen((v) => !v)}
+        onClick={() => setMenuOpen((v) => !v)}
       >
         ☰
       </button>
 
       <aside className="dashboard-sidebar-nav">
         <div className="sidebar-top">
-          <button
-            className="sidebar-icon sidebar-menu"
-            aria-label="Toggle sidebar"
-            onClick={() => setSidebarOpen((v) => !v)}
-          >
-            ☰
-          </button>
+          <span className="sidebar-icon sidebar-menu" aria-hidden="true">☰</span>
           <span className="sidebar-avatar" title={displayName}>
             {displayName.charAt(0).toUpperCase()}
           </span>
@@ -255,11 +227,7 @@ export default function Dashboard() {
             <p className="dashboard-eyebrow">Welcome back</p>
             <h1 className="dashboard-greeting">{displayName}</h1>
           </div>
-          <DailyProgressRing
-            streak={MOCK_USER.streak}
-            completed={completedCount}
-            total={goals.length}
-          />
+          <StreakRing value={MOCK_USER.streak} goal={MOCK_USER.streakGoal} />
         </header>
 
         <section className="dashboard-rooms-section">
@@ -285,20 +253,9 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {roomError && (
-            <p role="alert" className="dashboard-empty">
-              {roomError}
-            </p>
-          )}
-
           <div className="room-grid">
             {visibleRooms.map((room) => (
-              <RoomCard
-                key={room.id}
-                room={room}
-                disabled={joiningRoomId === room.id}
-                onEnter={handleEnterRoom}
-              />
+              <RoomCard key={room.id} room={room} onEnter={() => navigate(`/study-room/${room.id}`)} />
             ))}
             {visibleRooms.length === 0 && (
               <p className="dashboard-empty">No rooms yet for {activeFilter}. Start one above.</p>
@@ -322,37 +279,7 @@ export default function Dashboard() {
                 </li>
               ))}
             </ul>
-            {showAddGoal ? (
-              <form className="goal-add-form" onSubmit={addGoal}>
-                <input
-                  type="text"
-                  value={newGoalText}
-                  onChange={(event) => setNewGoalText(event.target.value)}
-                  placeholder="Enter a daily goal"
-                  aria-label="New daily goal"
-                  autoFocus
-                />
-                <button type="submit" className="goal-add-submit">Add</button>
-                <button
-                  type="button"
-                  className="goal-add-cancel"
-                  onClick={() => {
-                    setNewGoalText("");
-                    setShowAddGoal(false);
-                  }}
-                >
-                  Cancel
-                </button>
-              </form>
-            ) : (
-              <button
-                type="button"
-                className="goal-add-button"
-                onClick={() => setShowAddGoal(true)}
-              >
-                + Add goal
-              </button>
-            )}
+            <p className="goal-hint">Checklist items are what count toward streak completion.</p>
           </div>
 
           <div className="dashboard-card">
@@ -364,8 +291,8 @@ export default function Dashboard() {
                   className={`leaderboard-item ${entry.name === "You" ? "leaderboard-you" : ""}`}
                 >
                   <span className="leaderboard-rank">{i + 1}</span>
-                  <span className="leaderboard-name">{entry.name}</span>
-                  <span className="leaderboard-streak">🔥 {entry.streak} days</span>
+                  <Avatar name={entry.name} />
+                  <span className="leaderboard-name">Streak day {entry.streak}</span>
                 </li>
               ))}
             </ul>

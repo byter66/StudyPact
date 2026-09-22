@@ -14,6 +14,10 @@ const EXAM_STYLES = {
 export default function RoomCard({ room, onEnter, disabled = false }) {
   const exam = EXAM_STYLES[room.examTag] || { label: room.examTag, tint: "tint-a" };
 
+  // Dashboard now only ever passes rooms with at least one active member,
+  // so every card rendered here IS live by definition — no need to branch.
+  const activeCount = room.activeMembers?.length || 0;
+
   return (
     <button
       className={`room-card ${exam.tint}`}
@@ -23,25 +27,34 @@ export default function RoomCard({ room, onEnter, disabled = false }) {
     >
       <div className="room-card-top">
         <span className="room-card-tag">{exam.label}</span>
-        {room.isLive && <span className="room-card-live">● Live</span>}
+        <span className="room-card-live">● Live</span>
       </div>
 
       <h3 className="room-card-title">{room.title}</h3>
 
       <div className="room-card-meta">
         <div className="room-card-avatars">
-          {room.members.slice(0, 4).map((m, i) => (
-            <span key={i} className="room-card-avatar" title={m}>
-              {m.charAt(0).toUpperCase()}
-            </span>
-          ))}
+          {room.members.slice(0, 4).map((m, i) => {
+            const memberIsActive = room.activeMembers?.includes(m);
+            return (
+              <span
+                key={i}
+                className={`room-card-avatar ${memberIsActive ? "is-active" : "is-inactive"}`}
+                title={memberIsActive ? `${m} — studying now` : `${m} — not active`}
+              >
+                {m.charAt(0).toUpperCase()}
+              </span>
+            );
+          })}
           {room.members.length > 4 && (
             <span className="room-card-avatar room-card-avatar-more">
               +{room.members.length - 4}
             </span>
           )}
         </div>
-        <span className="room-card-count">{room.members.length} studying</span>
+        <span className="room-card-count">
+          {activeCount} of {room.members.length} studying now
+        </span>
       </div>
     </button>
   );
