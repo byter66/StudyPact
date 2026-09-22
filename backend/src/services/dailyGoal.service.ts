@@ -122,3 +122,61 @@ export const updateTodayDailyGoal = async (
 
   return toDailyGoal(data as DailyGoalRow);
 };
+
+export const completeTodayDailyGoal = async (
+  roomId: string,
+  userId: string
+): Promise<DailyGoal> => {
+  await requireRoomMembership(roomId, userId);
+
+  const { data: existingGoal, error: lookupError } = await supabase
+    .from("daily_goals")
+    .select(DAILY_GOAL_COLUMNS)
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .eq("goal_date", getToday())
+    .maybeSingle();
+
+  if (lookupError) {
+    throw lookupError;
+  }
+
+  if (!existingGoal) {
+    throw new DailyGoalServiceError(
+      404,
+      "No daily goal exists for today"
+    );
+  }
+
+  const goal = existingGoal as DailyGoalRow;
+
+  if (goal.is_completed) {
+    return toDailyGoal(goal);
+  }
+
+  const { data, error } = await supabase
+    .from("daily_goals")
+    .update({
+      is_completed: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", goal.id)
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .eq("goal_date", getToday())
+    .select(DAILY_GOAL_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new DailyGoalServiceError(
+      404,
+      "No daily goal exists for today"
+    );
+  }
+
+  return toDailyGoal(data as DailyGoalRow);
+};
