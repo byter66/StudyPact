@@ -5,7 +5,7 @@ import {
     createPomodoroSession,
     updatePomodoroSession,
 } from '../../services/pomodoroApi';
-import { getRoomById, joinRoom, leaveRoom } from '../../services/roomService';
+import { getRoomById, getRoomMembers, joinRoom, leaveRoom } from '../../services/roomService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import './StudyRoom.css';
@@ -36,11 +36,14 @@ const StudyRoom = () => {
     const { roomId } = useParams();
     const navigate = useNavigate();
     const { user } = useAuth();
+    const userId = user?.id;
+    const presenceDisplayName = user?.full_name || user?.email || 'StudyPact member';
     const [room, setRoom] = useState(null);
     const [roomLoading, setRoomLoading] = useState(true);
     const [roomError, setRoomError] = useState('');
     const [members, setMembers] = useState([]);
     const [realtimeError, setRealtimeError] = useState('');
+    const [memberError, setMemberError] = useState('');
     const [leaving, setLeaving] = useState(false);
 
     const [myStatus, setMyStatus] = useState('studying');
@@ -61,6 +64,64 @@ const StudyRoom = () => {
     useEffect(() => {
         let isCurrent = true;
         let channel = null;
+        let roomMembers = [];
+        let memberRequestId = 0;
+
+        const syncPresence = () => {
+            if (!isCurrent) return;
+
+            const activeMembers = new Map();
+            if (channel) {
+                Object.values(channel.presenceState()).flat().forEach((presence) => {
+                    if (!presence.user_id || activeMembers.has(presence.user_id)) return;
+                    activeMembers.set(presence.user_id, {
+                        id: presence.user_id,
+                        name: presence.display_name || 'StudyPact member',
+                        status: 'studying',
+                    });
+                });
+            }
+
+            const membersById = new Map(
+                roomMembers.map((member) => [
+                    member.id,
+                    activeMembers.get(member.id) || member,
+                ]),
+            );
+            activeMembers.forEach((member, id) => membersById.set(id, member));
+            setMembers([...membersById.values()]);
+        };
+
+        const refreshMembers = async () => {
+            if (!isCurrent) return;
+            const requestId = ++memberRequestId;
+            try {
+                const fetchedMembers = await getRoomMembers(roomId);
+                if (!isCurrent || requestId !== memberRequestId) return;
+
+                setMemberError('');
+                roomMembers = fetchedMembers.map((member) => ({
+                    id: member.userId,
+                    name: member.displayName,
+                    status: 'away',
+                }));
+                syncPresence();
+            } catch (error) {
+                if (isCurrent) {
+                    setMemberError(
+                        error.message
+                            ? `Unable to load room members: ${error.message}`
+                            : 'Unable to load room members.',
+                    );
+                }
+            }
+        };
+
+        const handlePresenceChange = () => {
+            if (!isCurrent) return;
+            syncPresence();
+            void refreshMembers();
+        };
 
         const loadRoom = async () => {
             setRoomLoading(true);
@@ -68,6 +129,7 @@ const StudyRoom = () => {
 
             try {
                 const fetchedRoom = await getRoomById(roomId);
+                if (!isCurrent) return;
                 await joinRoom(roomId);
                 if (!isCurrent) return;
 
@@ -78,47 +140,48 @@ const StudyRoom = () => {
                     isLive: true,
                 });
 
-                if (!supabase || !user?.id) {
+                await refreshMembers();
+                if (!isCurrent) return;
+
+                if (!supabase || !userId) {
                     setRealtimeError('Realtime is not configured for this environment.');
                     return;
                 }
 
                 channel = supabase.channel(`room-presence:${roomId}`, {
-                    config: { presence: { key: user.id } },
+                    config: { presence: { key: userId } },
                 });
 
-                const syncPresence = () => {
-                    const seen = new Set();
-                    const activeMembers = [];
-                    Object.values(channel.presenceState()).flat().forEach((presence) => {
-                        if (!presence.user_id || seen.has(presence.user_id)) return;
-                        seen.add(presence.user_id);
-                        activeMembers.push({
-                            id: presence.user_id,
-                            name: presence.display_name || 'StudyPact member',
-                            status: 'studying',
-                        });
-                    });
-                    setMembers(activeMembers);
-                };
-
                 channel
-                    .on('presence', { event: 'sync' }, syncPresence)
-                    .on('presence', { event: 'join' }, syncPresence)
-                    .on('presence', { event: 'leave' }, syncPresence);
+                    .on('presence', { event: 'sync' }, handlePresenceChange)
+                    .on('presence', { event: 'join' }, handlePresenceChange)
+                    .on('presence', { event: 'leave' }, handlePresenceChange);
 
                 channel.subscribe(async (status) => {
+                    if (!isCurrent) return;
+
                     if (status === 'SUBSCRIBED') {
+                        setRealtimeError('');
                         const { error } = await channel.track({
-                            user_id: user.id,
-                            display_name: user.full_name || user.email || 'StudyPact member',
+                            user_id: userId,
+                            display_name: presenceDisplayName,
                         });
-                        if (error && isCurrent) {
+                        if (!isCurrent) return;
+                        if (error) {
                             setRealtimeError('Unable to announce your presence. Please retry.');
+                        } else {
+                            syncPresence();
                         }
-                        syncPresence();
-                    } else if (status === 'CHANNEL_ERROR' && isCurrent) {
-                        setRealtimeError('Realtime connection failed. Refresh to retry.');
+                    } else if (
+                        status === 'CHANNEL_ERROR' ||
+                        status === 'TIMED_OUT' ||
+                        status === 'CLOSED'
+                    ) {
+                        setRealtimeError(
+                            status === 'CLOSED'
+                                ? 'Realtime channel closed. Re-enter the room to reconnect.'
+                                : `Realtime connection ${status.toLowerCase().replace('_', ' ')}. Waiting for automatic retry.`,
+                        );
                     }
                 });
             } catch (error) {
@@ -145,7 +208,7 @@ const StudyRoom = () => {
                 supabase?.removeChannel(channel);
             }
         };
-    }, [roomId, user]);
+    }, [roomId, userId, presenceDisplayName]);
 
     const handleLeaveRoom = async () => {
         if (leaving) return;
@@ -385,6 +448,7 @@ const StudyRoom = () => {
                     </button>
 
                     <p className="sr-panel-label">Members ({members.length})</p>
+                    {memberError && <p className="sr-realtime-error" role="alert">{memberError}</p>}
                     {realtimeError && <p className="sr-realtime-error" role="alert">{realtimeError}</p>}
                     <ul className="sr-member-list">
                         {members.map((m) => (

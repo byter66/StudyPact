@@ -56,9 +56,6 @@ const MOCK_GOALS = [
   { id: "g3", text: "30 min current affairs", done: false },
 ];
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function DailyProgressRing({ streak, completed, total }) {
   const size = 52;
   const stroke = 4;
@@ -197,25 +194,29 @@ export default function Dashboard() {
       });
 
       const room = result.data;
+      const creatorName = user?.full_name || MOCK_USER.name;
       const newRoom = {
         id: room.id,
         examTag: room.examCategory,
         title: room.name,
-        members: [user?.full_name || MOCK_USER.name],
-        isLive: false,
+        members: [creatorName],
+        activeMembers: [creatorName],
+        isLive: true,
       };
 
       setRooms((prev) => [newRoom, ...prev]);
       setShowCreateModal(false);
+      navigate(`/study-room/${room.id}`);
     } catch (error) {
       console.error("Unable to create room:", error);
+      setRoomError(error.message || "Unable to create this room.");
     }
   };
 
   const handleEnterRoom = async (room) => {
     if (!UUID_PATTERN.test(room.id)) {
       setRoomError("This room is not connected to a real backend room yet.");
-      return;
+      return false;
     }
 
     setRoomError("");
@@ -224,8 +225,10 @@ export default function Dashboard() {
     try {
       await joinRoom(room.id);
       navigate(`/study-room/${room.id}`);
+      return true;
     } catch (error) {
       setRoomError(error.message || "Unable to join this room.");
+      return false;
     } finally {
       setJoiningRoomId(null);
     }
@@ -241,8 +244,8 @@ export default function Dashboard() {
 
     try {
       const room = await getRoomByCode(code);
-      await handleEnterRoom(room);
-      setRoomCode("");
+      const entered = await handleEnterRoom(room);
+      if (entered) setRoomCode("");
     } catch (error) {
       setRoomError(error.message || "Unable to find this room.");
     } finally {
