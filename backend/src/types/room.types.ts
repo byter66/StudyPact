@@ -27,6 +27,12 @@ export interface RoomMember {
   joinedAt: string;
 }
 
+export interface RoomLeaderboardEntry {
+  userId: string;
+  name: string;
+  streak: number;
+}
+
 export interface RoomRow {
   id: string;
   room_code: string;

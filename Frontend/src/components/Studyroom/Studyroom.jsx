@@ -5,7 +5,13 @@ import {
     createPomodoroSession,
     updatePomodoroSession,
 } from '../../services/pomodoroApi';
-import { getRoomById, getRoomMembers, joinRoom, leaveRoom } from '../../services/roomService';
+import {
+    getRoomById,
+    getRoomLeaderboard,
+    getRoomMembers,
+    joinRoom,
+    leaveRoom,
+} from '../../services/roomService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import './StudyRoom.css';
@@ -42,6 +48,9 @@ const StudyRoom = () => {
     const [roomLoading, setRoomLoading] = useState(true);
     const [roomError, setRoomError] = useState('');
     const [members, setMembers] = useState([]);
+    const [leaderboard, setLeaderboard] = useState([]);
+    const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+    const [leaderboardError, setLeaderboardError] = useState('');
     const [realtimeError, setRealtimeError] = useState('');
     const [memberError, setMemberError] = useState('');
     const [leaving, setLeaving] = useState(false);
@@ -209,6 +218,31 @@ const StudyRoom = () => {
             }
         };
     }, [roomId, userId, presenceDisplayName]);
+
+    useEffect(() => {
+        if (!room) return undefined;
+
+        let isCurrent = true;
+        setLeaderboardLoading(true);
+        setLeaderboardError('');
+
+        getRoomLeaderboard(roomId)
+            .then((entries) => {
+                if (isCurrent) setLeaderboard(entries);
+            })
+            .catch((error) => {
+                if (isCurrent) {
+                    setLeaderboardError(error.message || 'Unable to load leaderboard.');
+                }
+            })
+            .finally(() => {
+                if (isCurrent) setLeaderboardLoading(false);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [room, roomId]);
 
     const handleLeaveRoom = async () => {
         if (leaving) return;
@@ -466,6 +500,37 @@ const StudyRoom = () => {
                             </li>
                         ))}
                     </ul>
+                    <div className="sr-leaderboard">
+                        <p className="sr-panel-label">Leaderboard</p>
+                        {leaderboardLoading && (
+                            <p className="sr-leaderboard-message">Loading leaderboard...</p>
+                        )}
+                        {leaderboardError && (
+                            <p className="sr-leaderboard-message" role="alert">
+                                {leaderboardError}
+                            </p>
+                        )}
+                        {!leaderboardLoading && !leaderboardError && (
+                            <ol className="sr-leaderboard-list">
+                                {leaderboard.map((entry, index) => (
+                                    <li
+                                        key={entry.userId}
+                                        className={`sr-leaderboard-item ${
+                                            entry.userId === user?.id ? 'sr-leaderboard-you' : ''
+                                        }`}
+                                    >
+                                        <span className="sr-leaderboard-rank">
+                                            {index + 1}
+                                        </span>
+                                        <span className="sr-leaderboard-name">{entry.name}</span>
+                                        <span className="sr-leaderboard-streak">
+                                            🔥 {entry.streak}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                    </div>
                 </aside>
 
                 {/* Center: timer + goal + mock room */}

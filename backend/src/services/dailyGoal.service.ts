@@ -1,4 +1,4 @@
-import { supabase } from "../config/supabase";
+import { supabase, supabaseAdmin } from "../config/supabase";
 import { CommitmentPlan, DailyGoal } from "../types/accountability.types";
 import {
   CreateDailyGoalInput,
@@ -248,4 +248,52 @@ export const getCurrentStreak = async (
   }
 
   return streak;
+};
+
+export const getRoomCurrentStreaks = async (
+  roomId: string,
+  userIds: string[]
+): Promise<Map<string, number>> => {
+  const streaks = new Map(userIds.map((userId) => [userId, 0]));
+  if (userIds.length === 0) {
+    return streaks;
+  }
+
+  const today = getToday();
+  const { data, error } = await supabaseAdmin
+    .from("daily_goals")
+    .select(DAILY_GOAL_COLUMNS)
+    .eq("room_id", roomId)
+    .in("user_id", userIds)
+    .lte("goal_date", today)
+    .order("goal_date", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  const goalsByUserAndDate = new Map<string, Map<string, DailyGoal[]>>();
+  for (const row of (data ?? []) as DailyGoalRow[]) {
+    const goalsByDate =
+      goalsByUserAndDate.get(row.user_id) ?? new Map<string, DailyGoal[]>();
+    const goals = goalsByDate.get(row.goal_date) ?? [];
+    goals.push(toDailyGoal(row));
+    goalsByDate.set(row.goal_date, goals);
+    goalsByUserAndDate.set(row.user_id, goalsByDate);
+  }
+
+  for (const userId of userIds) {
+    const goalsByDate = goalsByUserAndDate.get(userId);
+    let currentDate = today;
+    let streak = 0;
+
+    while (isCompletedDay(userId, roomId, goalsByDate?.get(currentDate))) {
+      streak += 1;
+      currentDate = getPreviousDate(currentDate);
+    }
+
+    streaks.set(userId, streak);
+  }
+
+  return streaks;
 };

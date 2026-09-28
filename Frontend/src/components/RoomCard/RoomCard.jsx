@@ -12,50 +12,28 @@ const EXAM_STYLES = {
 };
 
 export default function RoomCard({ room, onEnter, disabled = false }) {
-  const exam = EXAM_STYLES[room.examTag] || { label: room.examTag, tint: "tint-a" };
-
-  // Dashboard now only ever passes rooms with at least one active member,
-  // so every card rendered here IS live by definition — no need to branch.
-  const activeCount = room.activeMembers?.length || 0;
+  const exam = EXAM_STYLES[room.examCategory] || {
+    label: room.examCategory,
+    tint: "tint-a",
+  };
 
   return (
     <button
       className={`room-card ${exam.tint}`}
-      aria-label={`Join room ${room.title}`}
+      aria-label={`Join room ${room.name}`}
       disabled={disabled}
       onClick={() => onEnter?.(room)}
     >
       <div className="room-card-top">
         <span className="room-card-tag">{exam.label}</span>
-        <span className="room-card-live">● Live</span>
+        <span className="room-card-code">Code: {room.roomCode}</span>
       </div>
 
-      <h3 className="room-card-title">{room.title}</h3>
+      <h3 className="room-card-title">{room.name}</h3>
 
-      <div className="room-card-meta">
-        <div className="room-card-avatars">
-          {room.members.slice(0, 4).map((m, i) => {
-            const memberIsActive = room.activeMembers?.includes(m);
-            return (
-              <span
-                key={i}
-                className={`room-card-avatar ${memberIsActive ? "is-active" : "is-inactive"}`}
-                title={memberIsActive ? `${m} — studying now` : `${m} — not active`}
-              >
-                {m.charAt(0).toUpperCase()}
-              </span>
-            );
-          })}
-          {room.members.length > 4 && (
-            <span className="room-card-avatar room-card-avatar-more">
-              +{room.members.length - 4}
-            </span>
-          )}
-        </div>
-        <span className="room-card-count">
-          {activeCount} of {room.members.length} studying now
-        </span>
-      </div>
+      {room.description && (
+        <p className="room-card-description">{room.description}</p>
+      )}
     </button>
   );
 }

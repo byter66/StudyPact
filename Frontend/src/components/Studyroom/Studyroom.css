@@ -215,6 +215,56 @@
     line-height: 1.4;
 }
 
+.sr-leaderboard {
+    border-top: 1px solid #ece6d8;
+    margin-top: 20px;
+    padding-top: 16px;
+}
+
+.sr-leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sr-leaderboard-item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.sr-leaderboard-you {
+    color: #a8511f;
+    font-weight: 700;
+}
+
+.sr-leaderboard-rank {
+    color: #8a8474;
+}
+
+.sr-leaderboard-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sr-leaderboard-streak {
+    color: #6b6558;
+    white-space: nowrap;
+}
+
+.sr-leaderboard-message {
+    color: #8a8474;
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 0;
+}
+
 /* ---------- Focus panel (center) ---------- */
 
 .sr-focus-panel {

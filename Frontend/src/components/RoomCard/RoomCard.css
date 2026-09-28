@@ -50,10 +50,10 @@
 .tint-e .room-card-tag { background: #EFE0C9; }
 .tint-f .room-card-tag { background: #DCE6DA; }
 
-.room-card-live {
+.room-card-code {
   font-size: 11px;
   font-weight: 700;
-  color: #5C6B3F;
+  color: #6B6558;
 }
 
 .room-card-title {
@@ -64,45 +64,11 @@
   line-height: 1.25;
 }
 
-.room-card-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.room-card-avatars {
-  display: flex;
-}
-
-.room-card-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #EDE6D9;
-  color: #211F1C;
-  font-size: 10px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #FDFBF7;
-  margin-left: -8px;
-}
-
-.room-card-avatar:first-child {
-  margin-left: 0;
-}
-
-.room-card-avatar-more {
-  background: #C1602E;
-  color: #FDFBF7;
-}
-
-.room-card-count {
+.room-card-description {
+  margin: 0;
   font-size: 11px;
   color: #6B6558;
-  white-space: nowrap;
+  line-height: 1.4;
 }
 
 .room-card-create {

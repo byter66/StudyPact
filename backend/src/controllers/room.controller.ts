@@ -6,6 +6,7 @@ import {
   getRoomById,
   isRoomMember,
   leaveRoom as leaveRoomService,
+  listRoomLeaderboard,
   listRoomMembers,
   joinRoom as joinRoomService,
   listRooms,
@@ -159,6 +160,30 @@ export const getMembers = async (
 
   const members = await listRoomMembers(roomId);
   res.status(200).json({ success: true, data: members });
+};
+
+export const getRoomLeaderboard = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  const roomId = req.params.roomId;
+  const userId = req.user?.id;
+
+  if (typeof roomId !== "string" || !UUID_PATTERN.test(roomId)) {
+    res.status(400).json({ success: false, message: "Invalid room ID" });
+    return;
+  }
+
+  if (!userId || !(await isRoomMember(roomId, userId))) {
+    res.status(403).json({
+      success: false,
+      message: "Join this room before viewing its leaderboard.",
+    });
+    return;
+  }
+
+  const leaderboard = await listRoomLeaderboard(roomId);
+  res.status(200).json({ success: true, data: leaderboard });
 };
 
 export const leaveRoom = async (

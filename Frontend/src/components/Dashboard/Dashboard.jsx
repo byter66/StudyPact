@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RoomCard from "../RoomCard/RoomCard";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../services/apiClient";
-import { getRoomByCode, joinRoom } from "../../services/roomService";
+import { getRoomByCode, getRooms, joinRoom } from "../../services/roomService";
 import "./Dashboard.css";
 
 const MOCK_USER = { name: "Ananya", streak: 12, streakGoal: 14, rank: 8 };
@@ -11,37 +11,6 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const EXAM_FILTERS = ["All", "UPSC", "JEE", "NEET", "GATE"];
-
-const MOCK_ROOMS = [
-  {
-    id: "r1",
-    examTag: "UPSC",
-    title: "Prelims Revision Pact",
-    members: ["Riya", "Karan", "Sana"],
-    activeMembers: ["Riya", "Karan", "Sana"],
-  },
-  {
-    id: "r2",
-    examTag: "GATE",
-    title: "CS Core Subjects",
-    members: ["Arjun", "Divya"],
-    activeMembers: ["Arjun", "Divya"],
-  },
-  {
-    id: "r3",
-    examTag: "NEET",
-    title: "Biology Daily Grind",
-    members: ["Meera", "Faisal", "Om", "Priya", "Tara"],
-    activeMembers: ["Meera", "Om"],
-  },
-  {
-    id: "r4",
-    examTag: "JEE",
-    title: "Physics Problem Set",
-    members: ["Nikhil"],
-    activeMembers: [],
-  },
-];
 
 const MOCK_LEADERBOARD = [
   { name: "Sana", streak: 21 },
@@ -153,7 +122,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [goals, setGoals] = useState(MOCK_GOALS);
-  const [rooms, setRooms] = useState(MOCK_ROOMS);
+  const [rooms, setRooms] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("All");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -163,6 +133,23 @@ export default function Dashboard() {
   const [roomCode, setRoomCode] = useState("");
   const [joiningByCode, setJoiningByCode] = useState(false);
   const [roomError, setRoomError] = useState("");
+
+  const loadRooms = async () => {
+    setRoomsLoading(true);
+    try {
+      const fetchedRooms = await getRooms();
+      setRooms(fetchedRooms);
+      setRoomError("");
+    } catch (error) {
+      setRoomError(error.message || "Unable to load rooms.");
+    } finally {
+      setRoomsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRooms();
+  }, []);
 
   const toggleGoal = (id) => {
     setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
@@ -194,17 +181,7 @@ export default function Dashboard() {
       });
 
       const room = result.data;
-      const creatorName = user?.full_name || MOCK_USER.name;
-      const newRoom = {
-        id: room.id,
-        examTag: room.examCategory,
-        title: room.name,
-        members: [creatorName],
-        activeMembers: [creatorName],
-        isLive: true,
-      };
-
-      setRooms((prev) => [newRoom, ...prev]);
+      await loadRooms();
       setShowCreateModal(false);
       navigate(`/study-room/${room.id}`);
     } catch (error) {
@@ -253,9 +230,10 @@ export default function Dashboard() {
     }
   };
 
-  const liveRooms = rooms.filter((room) => room.activeMembers?.length > 0);
   const visibleRooms =
-    activeFilter === "All" ? liveRooms : liveRooms.filter((r) => r.examTag === activeFilter);
+    activeFilter === "All"
+      ? rooms
+      : rooms.filter((room) => room.examCategory === activeFilter);
 
   const completedCount = goals.filter((g) => g.done).length;
   const displayName = user?.full_name || MOCK_USER.name;
@@ -353,7 +331,8 @@ export default function Dashboard() {
           )}
 
           <div className="room-grid">
-            {visibleRooms.map((room) => (
+            {roomsLoading && <p className="dashboard-empty">Loading rooms...</p>}
+            {!roomsLoading && visibleRooms.map((room) => (
               <RoomCard
                 key={room.id}
                 room={room}
@@ -361,7 +340,7 @@ export default function Dashboard() {
                 disabled={joiningRoomId === room.id}
               />
             ))}
-            {visibleRooms.length === 0 && (
+            {!roomsLoading && visibleRooms.length === 0 && (
               <p className="dashboard-empty">No rooms yet for {activeFilter}. Start one above.</p>
             )}
           </div>

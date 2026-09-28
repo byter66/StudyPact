@@ -1,8 +1,10 @@
 import { supabase, supabaseAdmin } from "../config/supabase";
+import { getRoomCurrentStreaks } from "./dailyGoal.service";
 import {
   CreateRoomInput,
   JoinRoomResult,
   Room,
+  RoomLeaderboardEntry,
   RoomMember,
   RoomRow,
 } from "../types/room.types";
@@ -181,6 +183,29 @@ export const listRoomMembers = async (
     displayName: profileById.get(member.user_id) || "StudyPact member",
     joinedAt: member.joined_at,
   }));
+};
+
+export const listRoomLeaderboard = async (
+  roomId: string
+): Promise<RoomLeaderboardEntry[]> => {
+  const members = await listRoomMembers(roomId);
+  const streaks = await getRoomCurrentStreaks(
+    roomId,
+    members.map((member) => member.userId)
+  );
+
+  return members
+    .map((member) => ({
+      userId: member.userId,
+      name: member.displayName,
+      streak: streaks.get(member.userId) ?? 0,
+    }))
+    .sort(
+      (left, right) =>
+        right.streak - left.streak ||
+        left.name.localeCompare(right.name) ||
+        left.userId.localeCompare(right.userId)
+    );
 };
 
 export const isRoomMember = async (
