@@ -1,26 +1,10 @@
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+import { apiRequest } from './apiClient';
 
 const request = async (path, options = {}) => {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
-        ...options,
-    });
+    const payload = await apiRequest(`/api${path}`, options);
 
-    let payload;
-    try {
-        payload = await response.json();
-    } catch {
-        throw new Error(`Pomodoro request failed with status ${response.status}`);
-    }
-
-    if (!response.ok || payload.success !== true) {
-        throw new Error(
-            payload.message || `Pomodoro request failed with status ${response.status}`,
-        );
+    if (payload.success !== true) {
+        throw new Error(payload.message || 'Pomodoro request failed.');
     }
 
     return payload.data;

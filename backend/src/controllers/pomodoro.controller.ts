@@ -11,6 +11,7 @@ import {
   CreatePomodoroSessionInput,
   UpdatePomodoroSessionInput,
 } from "../types/pomodoro.types";
+import { isRoomMember } from "../services/room.service";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -71,6 +72,14 @@ export const postPomodoroSession = async (
     res.status(400).json({
       success: false,
       message: `plannedDurationSeconds must be an integer between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS}`,
+    });
+    return;
+  }
+
+  if (!(await isRoomMember(roomId, userId))) {
+    res.status(403).json({
+      success: false,
+      message: "Join this room before starting a Pomodoro session.",
     });
     return;
   }
@@ -192,6 +201,14 @@ export const getPomodoroSessions = async (
 
   if (typeof roomId !== "string" || !UUID_PATTERN.test(roomId)) {
     res.status(400).json({ success: false, message: "Invalid room ID" });
+    return;
+  }
+
+  if (!(await isRoomMember(roomId, userId))) {
+    res.status(403).json({
+      success: false,
+      message: "Join this room before viewing Pomodoro sessions.",
+    });
     return;
   }
 

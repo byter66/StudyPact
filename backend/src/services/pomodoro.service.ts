@@ -1,4 +1,4 @@
-import { supabase } from "../config/supabase";
+import { supabaseAdmin } from "../config/supabase";
 import {
   CreatePomodoroSessionInput,
   PomodoroSession,
@@ -26,7 +26,7 @@ const toPomodoroSession = (row: PomodoroSessionRow): PomodoroSession => ({
 export const createPomodoroSession = async (
   input: CreatePomodoroSessionInput
 ): Promise<PomodoroSession> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("pomodoro_sessions")
     .insert({
       room_id: input.roomId,
@@ -67,7 +67,7 @@ export const updatePomodoroSession = async (
     updates.focused_duration_seconds = input.focusedDurationSeconds;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("pomodoro_sessions")
     .update(updates)
     .eq("id", id)
@@ -96,7 +96,7 @@ export const listPomodoroSessions = async (
   roomId: string,
   userId: string
 ): Promise<PomodoroSession[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("pomodoro_sessions")
     .select(POMODORO_COLUMNS)
     .eq("room_id", roomId)
