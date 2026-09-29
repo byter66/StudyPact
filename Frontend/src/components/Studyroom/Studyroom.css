@@ -97,6 +97,7 @@
     gap: 16px;
     flex: 1;
     min-height: 0;
+    min-width: 0;
 }
 
 .sr-panel {
@@ -449,6 +450,8 @@ a.sr-quick-card:hover {
 
 .sr-side-panel {
     gap: 14px;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .sr-doubt-entry {
@@ -489,6 +492,7 @@ a.sr-quick-card:hover {
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    min-width: 0;
 }
 
 .sr-chat-messages {
@@ -518,7 +522,9 @@ a.sr-quick-card:hover {
     border-radius: 10px;
     padding: 8px 12px;
     max-width: 90%;
+    min-width: 0;
     align-self: flex-start;
+    overflow-wrap: anywhere;
 }
 
 .sr-chat-message.sr-chat-mine {
@@ -537,6 +543,8 @@ a.sr-quick-card:hover {
 .sr-chat-text {
     font-size: 13px;
     line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .sr-chat-form {
@@ -547,6 +555,7 @@ a.sr-quick-card:hover {
 
 .sr-chat-input {
     flex: 1;
+    min-width: 0;
     border: 1px solid #e4ddce;
     border-radius: 999px;
     padding: 9px 14px;
