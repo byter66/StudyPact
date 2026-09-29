@@ -11,13 +11,29 @@ import {
   joinRoom as joinRoomService,
   listRooms,
 } from "../services/room.service";
-import { CreateRoomInput } from "../types/room.types";
+import { CreateRoomInput, JoinRoomResult, Room } from "../types/room.types";
+import { TaskRequirementError } from "../types/userTask.types";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
+
+const handleTaskRequirementError = (
+  error: unknown,
+  res: Response
+): boolean => {
+  if (!(error instanceof TaskRequirementError)) {
+    return false;
+  }
+
+  res.status(error.statusCode).json({
+    success: false,
+    message: error.message,
+  });
+  return true;
+};
 
 export const getRooms = async (_req: Request, res: Response) => {
   const rooms = await listRooms();
@@ -88,12 +104,20 @@ export const postRoom = async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
-  const room = await createRoom({
-    name,
-    examCategory,
-    description,
-    creatorUserId,
-  });
+  let room: Room;
+  try {
+    room = await createRoom({
+      name,
+      examCategory,
+      description,
+      creatorUserId,
+    });
+  } catch (error) {
+    if (!handleTaskRequirementError(error, res)) {
+      throw error;
+    }
+    return;
+  }
 
   res.status(201).json({ success: true, data: room });
 };
@@ -118,7 +142,15 @@ export const joinRoom = async (
     return;
   }
 
-  const result = await joinRoomService(id, userId);
+  let result: JoinRoomResult | null;
+  try {
+    result = await joinRoomService(id, userId);
+  } catch (error) {
+    if (!handleTaskRequirementError(error, res)) {
+      throw error;
+    }
+    return;
+  }
 
   if (!result) {
     res.status(404).json({ success: false, message: "Room not found" });

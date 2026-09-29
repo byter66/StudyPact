@@ -290,6 +290,25 @@
   color: #6B6558;
 }
 
+.dashboard-goal-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 112px;
+  border: 1px dashed #E4DDCE;
+  border-radius: 10px;
+  background: #FAF6EF;
+  color: #6B6558;
+  font-size: 13px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.dashboard-goal-empty-state p {
+  margin: 0;
+  padding: 0 12px;
+}
+
 .goal-list {
   list-style: none;
   margin: 0 0 10px;

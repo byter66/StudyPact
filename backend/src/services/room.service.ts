@@ -1,5 +1,6 @@
 import { supabase, supabaseAdmin } from "../config/supabase";
 import { getRoomCurrentStreaks } from "./dailyGoal.service";
+import { requireUserHasTasks } from "./userTask.service";
 import {
   CreateRoomInput,
   JoinRoomResult,
@@ -65,6 +66,8 @@ export const getRoomByCode = async (roomCode: string): Promise<Room | null> => {
 };
 
 export const createRoom = async (input: CreateRoomInput): Promise<Room> => {
+  await requireUserHasTasks(input.creatorUserId);
+
   const { data, error } = await supabaseAdmin
     .from("rooms")
     .insert({
@@ -100,6 +103,8 @@ export const joinRoom = async (
   roomId: string,
   userId: string
 ): Promise<JoinRoomResult | null> => {
+  await requireUserHasTasks(userId);
+
   const room = await getRoomById(roomId);
 
   if (!room) {

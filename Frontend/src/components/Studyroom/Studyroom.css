@@ -419,6 +419,23 @@ a.sr-quick-card:hover {
     color: #6b6558;
 }
 
+.sr-goal-task {
+   display: inline-flex;
+   align-items: center;
+   gap: 6px;
+}
+
+.sr-goal-task input {
+   accent-color: #5c6b3f;
+   margin: 0;
+}
+
+.sr-task-error {
+   margin: 0 0 8px;
+   color: #a33a2b;
+   font-size: 12px;
+}
+
 .sr-goal-chip.sr-goal-done {
     background: #e7efdf;
     color: #4f6b3f;

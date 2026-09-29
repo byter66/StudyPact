@@ -12,6 +12,7 @@ import {
     joinRoom,
     leaveRoom,
 } from '../../services/roomService';
+import { getUserTasks, updateUserTask } from '../../services/userTaskService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import './StudyRoom.css';
@@ -28,12 +29,6 @@ const INITIAL_MESSAGES = [
     { id: 1, author: 'Kavya', text: 'Anyone started Polity ch.4 yet?' },
     { id: 2, author: 'Rahul', text: 'Yeah, halfway through. Notes in the doubt forum.' },
     { id: 3, author: 'You', text: 'On it after this pomodoro 🍅' },
-];
-
-const GOALS = [
-    { id: 1, label: '2 hours — Prelims revision', done: true },
-    { id: 2, label: 'Solve 1 mock doubt', done: false },
-    { id: 3, label: '30 min current affairs', done: false },
 ];
 
 const FOCUS_MINUTES = 25;
@@ -54,6 +49,9 @@ const StudyRoom = () => {
     const [realtimeError, setRealtimeError] = useState('');
     const [memberError, setMemberError] = useState('');
     const [leaving, setLeaving] = useState(false);
+    const [tasks, setTasks] = useState([]);
+    const [tasksLoading, setTasksLoading] = useState(true);
+    const [tasksError, setTasksError] = useState('');
 
     const [myStatus, setMyStatus] = useState('studying');
     const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
@@ -244,6 +242,49 @@ const StudyRoom = () => {
         };
     }, [room, roomId]);
 
+    useEffect(() => {
+        if (!room) return undefined;
+
+        let isCurrent = true;
+        setTasksLoading(true);
+        setTasksError('');
+
+        getUserTasks()
+            .then((userTasks) => {
+                if (isCurrent) setTasks(userTasks);
+            })
+            .catch((error) => {
+                if (isCurrent) {
+                    setTasksError('Unable to load your tasks. Please retry from the dashboard.');
+                    console.error('Unable to load user tasks in room:', error);
+                }
+            })
+            .finally(() => {
+                if (isCurrent) setTasksLoading(false);
+            });
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [room]);
+
+    const toggleTask = async (task) => {
+        setTasksError('');
+        try {
+            const updatedTask = await updateUserTask(task.id, {
+                completed: !task.completed,
+            });
+            setTasks((currentTasks) =>
+                currentTasks.map((currentTask) =>
+                    currentTask.id === task.id ? updatedTask : currentTask
+                ),
+            );
+        } catch (error) {
+            setTasksError('Unable to update this task. Please try again.');
+            console.error('Unable to update user task in room:', error);
+        }
+    };
+
     const handleLeaveRoom = async () => {
         if (leaving) return;
         setLeaving(true);
@@ -424,7 +465,7 @@ const StudyRoom = () => {
         setDraft('');
     };
 
-    const completedGoals = GOALS.filter((g) => g.done).length;
+    const completedTasks = tasks.filter((task) => task.completed).length;
     const progressPercent = (FOCUS_MINUTES * 60 - secondsLeft) / (FOCUS_MINUTES * 60) * 100;
 
     if (roomLoading) {
@@ -580,12 +621,27 @@ const StudyRoom = () => {
                     </div>
 
                     <div className="sr-goal-strip">
-                        <span className="sr-goal-strip-label">Today's goal — {completedGoals}/{GOALS.length}</span>
+                        <span className="sr-goal-strip-label">
+                            My tasks — {completedTasks}/{tasks.length} complete
+                        </span>
+                        {tasksError && <p className="sr-task-error" role="alert">{tasksError}</p>}
                         <div className="sr-goal-strip-items">
-                            {GOALS.map((g) => (
-                                <span key={g.id} className={`sr-goal-chip ${g.done ? 'sr-goal-done' : ''}`}>
-                                    {g.done ? '✓' : '○'} {g.label}
-                                </span>
+                            {tasksLoading ? (
+                                <span className="sr-goal-chip">Loading tasks...</span>
+                            ) : tasks.length === 0 ? (
+                                <span className="sr-goal-chip">No tasks yet</span>
+                            ) : tasks.map((task) => (
+                                <label
+                                    key={task.id}
+                                    className={`sr-goal-chip sr-goal-task ${task.completed ? 'sr-goal-done' : ''}`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={task.completed}
+                                        onChange={() => toggleTask(task)}
+                                    />
+                                    {task.title}
+                                </label>
                             ))}
                         </div>
                     </div>

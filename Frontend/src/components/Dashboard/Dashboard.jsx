@@ -4,6 +4,11 @@ import RoomCard from "../RoomCard/RoomCard";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../services/apiClient";
 import { getRoomByCode, getRooms, joinRoom } from "../../services/roomService";
+import {
+  createUserTask,
+  getUserTasks,
+  updateUserTask,
+} from "../../services/userTaskService";
 import "./Dashboard.css";
 
 const MOCK_USER = { name: "Ananya", streak: 12, streakGoal: 14, rank: 8 };
@@ -12,17 +17,15 @@ const UUID_PATTERN =
 
 const EXAM_FILTERS = ["All", "UPSC", "JEE", "NEET", "GATE"];
 
+const EMPTY_TASKS_MESSAGE = "Your tasks will appear here. Create a task to get started.";
+const TASKS_LOAD_ERROR =
+  "Tasks are temporarily unavailable. Please retry; if this continues, check the task database setup.";
+
 const MOCK_LEADERBOARD = [
   { name: "Sana", streak: 21 },
   { name: "Karan", streak: 18 },
   { name: "You", streak: 12 },
   { name: "Divya", streak: 9 },
-];
-
-const MOCK_GOALS = [
-  { id: "g1", text: "2 hours — Prelims revision", done: true },
-  { id: "g2", text: "Solve 1 mock doubt", done: false },
-  { id: "g3", text: "30 min current affairs", done: false },
 ];
 
 function DailyProgressRing({ streak, completed, total }) {
@@ -121,7 +124,9 @@ function CreateRoomModal({ onClose, onCreate }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [goals, setGoals] = useState(MOCK_GOALS);
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [tasksError, setTasksError] = useState("");
   const [rooms, setRooms] = useState([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -147,29 +152,67 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => {
-    loadRooms();
-  }, []);
-
-  const toggleGoal = (id) => {
-    setGoals((prev) => prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)));
+  const loadTasks = async () => {
+    setTasksLoading(true);
+    setTasksError("");
+    try {
+      setTasks(await getUserTasks());
+    } catch (error) {
+      setTasksError(TASKS_LOAD_ERROR);
+      console.error("Unable to load user tasks:", error);
+    } finally {
+      setTasksLoading(false);
+    }
   };
 
-  const addGoal = (event) => {
+  useEffect(() => {
+    loadRooms();
+    loadTasks();
+  }, []);
+
+  const toggleTask = async (task) => {
+    setTasksError("");
+    try {
+      const updatedTask = await updateUserTask(task.id, {
+        completed: !task.completed,
+      });
+      setTasks((currentTasks) =>
+        currentTasks.map((currentTask) =>
+          currentTask.id === task.id ? updatedTask : currentTask
+        )
+      );
+    } catch (error) {
+      setTasksError("Unable to update this task. Please try again.");
+      console.error("Unable to update user task:", error);
+    }
+  };
+
+  const addTask = async (event) => {
     event.preventDefault();
-    const text = newGoalText.trim();
+    const title = newGoalText.trim();
 
-    if (!text) return;
+    if (!title) return;
 
-    setGoals((prev) => [
-      ...prev,
-      { id: `g${Date.now()}`, text, done: false },
-    ]);
-    setNewGoalText("");
-    setShowAddGoal(false);
+    setTasksError("");
+    try {
+      const task = await createUserTask(title);
+      setTasks((currentTasks) => [...currentTasks, task]);
+      setNewGoalText("");
+      setShowAddGoal(false);
+    } catch (error) {
+      setTasksError("Unable to add this task. Please try again.");
+      console.error("Unable to create user task:", error);
+    }
   };
 
   const handleCreateRoom = async ({ name }) => {
+    if (!tasksLoading && !tasksError && tasks.length === 0) {
+      setShowCreateModal(false);
+      setRoomError("Add at least one task on your dashboard before creating a room.");
+      return;
+    }
+
+    setRoomError("");
     try {
       const result = await apiRequest("/api/rooms", {
         method: "POST",
@@ -191,6 +234,11 @@ export default function Dashboard() {
   };
 
   const handleEnterRoom = async (room) => {
+    if (!tasksLoading && !tasksError && tasks.length === 0) {
+      setRoomError("Add at least one task on your dashboard before joining a room.");
+      return false;
+    }
+
     if (!UUID_PATTERN.test(room.id)) {
       setRoomError("This room is not connected to a real backend room yet.");
       return false;
@@ -235,8 +283,9 @@ export default function Dashboard() {
       ? rooms
       : rooms.filter((room) => room.examCategory === activeFilter);
 
-  const completedCount = goals.filter((g) => g.done).length;
+  const completedCount = tasks.filter((task) => task.completed).length;
   const displayName = user?.full_name || MOCK_USER.name;
+  const tasksEmpty = tasks.length === 0;
 
   return (
     <div className={`dashboard-shell ${sidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}>
@@ -286,7 +335,7 @@ export default function Dashboard() {
           <DailyProgressRing
             streak={MOCK_USER.streak}
             completed={completedCount}
-            total={goals.length}
+            total={tasks.length}
           />
         </header>
 
@@ -348,28 +397,47 @@ export default function Dashboard() {
 
         <section className="dashboard-panels">
           <div className="dashboard-card">
-            <h3>Daily goal</h3>
+            <h3>My tasks</h3>
             <p className="dashboard-card-subtext">
-              Set your daily goal — {completedCount}/{goals.length} complete
+              {completedCount}/{tasks.length} complete
             </p>
-            <ul className="goal-list">
-              {goals.map((goal) => (
-                <li key={goal.id} className="goal-item">
-                  <label>
-                    <input type="checkbox" checked={goal.done} onChange={() => toggleGoal(goal.id)} />
-                    <span className={goal.done ? "goal-done" : ""}>{goal.text}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
+            {tasksError && (
+              <p className="dashboard-room-error" role="alert">{tasksError}</p>
+            )}
+            {tasksLoading ? (
+              <p className="dashboard-card-subtext" role="status">Loading tasks...</p>
+            ) : tasksError ? (
+              <button type="button" className="goal-add-button" onClick={loadTasks}>
+                Retry loading tasks
+              </button>
+            ) : tasksEmpty ? (
+              <div className="dashboard-goal-empty-state" aria-live="polite">
+                <p>{EMPTY_TASKS_MESSAGE}</p>
+              </div>
+            ) : (
+              <ul className="goal-list">
+                {tasks.map((task) => (
+                  <li key={task.id} className="goal-item">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={() => toggleTask(task)}
+                      />
+                      <span className={task.completed ? "goal-done" : ""}>{task.title}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
             {showAddGoal ? (
-              <form className="goal-add-form" onSubmit={addGoal}>
+              <form className="goal-add-form" onSubmit={addTask}>
                 <input
                   type="text"
                   value={newGoalText}
                   onChange={(event) => setNewGoalText(event.target.value)}
-                  placeholder="Enter a daily goal"
-                  aria-label="New daily goal"
+                  placeholder="Enter a task"
+                  aria-label="New task"
                   autoFocus
                 />
                 <button type="submit" className="goal-add-submit">Add</button>
@@ -390,7 +458,7 @@ export default function Dashboard() {
                 className="goal-add-button"
                 onClick={() => setShowAddGoal(true)}
               >
-                + Add goal
+                + Add task
               </button>
             )}
           </div>
@@ -398,12 +466,12 @@ export default function Dashboard() {
           <div className="dashboard-card">
             <h3>Leaderboard</h3>
             <ul className="leaderboard-list">
-              {MOCK_LEADERBOARD.map((entry, i) => (
+              {MOCK_LEADERBOARD.map((entry, index) => (
                 <li
                   key={entry.name}
                   className={`leaderboard-item ${entry.name === "You" ? "leaderboard-you" : ""}`}
                 >
-                  <span className="leaderboard-rank">{i + 1}</span>
+                  <span className="leaderboard-rank">{index + 1}</span>
                   <span className="leaderboard-name">{entry.name}</span>
                   <span className="leaderboard-streak">🔥 {entry.streak} days</span>
                 </li>
