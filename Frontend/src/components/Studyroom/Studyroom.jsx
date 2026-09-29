@@ -25,13 +25,13 @@ const STATUS_LABEL = {
 
 const STATUS_CYCLE = ['studying', 'break', 'away'];
 
-const INITIAL_MESSAGES = [
-    { id: 1, author: 'Kavya', text: 'Anyone started Polity ch.4 yet?' },
-    { id: 2, author: 'Rahul', text: 'Yeah, halfway through. Notes in the doubt forum.' },
-    { id: 3, author: 'You', text: 'On it after this pomodoro 🍅' },
-];
-
 const FOCUS_MINUTES = 25;
+
+const createMessageId = () => (
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+);
 
 const StudyRoom = () => {
     const { roomId } = useParams();
@@ -56,7 +56,7 @@ const StudyRoom = () => {
     const [myStatus, setMyStatus] = useState('studying');
     const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
     const [isRunning, setIsRunning] = useState(false);
-    const [messages, setMessages] = useState(INITIAL_MESSAGES);
+    const [messages, setMessages] = useState([]);
     const [draft, setDraft] = useState('');
     const [sessionId, setSessionId] = useState(null);
     const [sessionStatus, setSessionStatus] = useState(null);
@@ -170,7 +170,34 @@ const StudyRoom = () => {
                 channel
                     .on('presence', { event: 'sync' }, handlePresenceChange)
                     .on('presence', { event: 'join' }, handlePresenceChange)
-                    .on('presence', { event: 'leave' }, handlePresenceChange);
+                    .on('presence', { event: 'leave' }, handlePresenceChange)
+                    .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
+                        if (
+                            !isCurrent ||
+                            !payload?.id ||
+                            !payload.user_id ||
+                            !payload.text
+                        ) {
+                            return;
+                        }
+
+                        setMessages((previousMessages) => {
+                            if (previousMessages.some((message) => message.id === payload.id)) {
+                                return previousMessages;
+                            }
+
+                            return [
+                                ...previousMessages,
+                                {
+                                    id: payload.id,
+                                    author: payload.user_id === userId
+                                        ? 'You'
+                                        : payload.display_name || 'StudyPact member',
+                                    text: payload.text,
+                                },
+                            ];
+                        });
+                    });
 
                 channel.subscribe(async (status) => {
                     if (!isCurrent) return;
@@ -499,11 +526,38 @@ const StudyRoom = () => {
         }
     };
 
-    const sendMessage = (e) => {
+    const sendMessage = async (e) => {
         e.preventDefault();
-        if (!draft.trim()) return;
-        setMessages((prev) => [...prev, { id: Date.now(), author: 'You', text: draft.trim() }]);
+        const text = draft.trim();
+        const channel = presenceChannelRef.current;
+        if (!text || !channel || !presenceSubscribedRef.current) return;
+
+        const message = {
+            id: createMessageId(),
+            user_id: userId,
+            display_name: presenceDisplayName,
+            text,
+            created_at: new Date().toISOString(),
+        };
+
+        setMessages((previousMessages) => [
+            ...previousMessages,
+            { id: message.id, author: 'You', text: message.text },
+        ]);
         setDraft('');
+
+        try {
+            const sendStatus = await channel.send({
+                type: 'broadcast',
+                event: 'chat-message',
+                payload: message,
+            });
+            if (sendStatus !== 'ok') {
+                console.error('Unable to send room chat message:', sendStatus);
+            }
+        } catch (error) {
+            console.error('Unable to send room chat message:', error);
+        }
     };
 
     const completedTasks = tasks.filter((task) => task.completed).length;
