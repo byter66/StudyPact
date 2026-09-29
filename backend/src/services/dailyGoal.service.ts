@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin } from "../config/supabase";
+import { supabaseAdmin } from "../config/supabase";
 import { CommitmentPlan, DailyGoal } from "../types/accountability.types";
 import {
   CreateDailyGoalInput,
@@ -39,7 +39,7 @@ const requireRoomMembership = async (
   roomId: string,
   userId: string
 ): Promise<void> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("room_members")
     .select("room_id")
     .eq("room_id", roomId)
@@ -64,7 +64,7 @@ export const createTodayDailyGoal = async (
   const description = validateDescription(input.description);
   await requireRoomMembership(input.roomId, input.userId);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("daily_goals")
     .insert({
       room_id: input.roomId,
@@ -97,7 +97,7 @@ export const updateTodayDailyGoal = async (
   const description = validateDescription(input.description);
   await requireRoomMembership(roomId, userId);
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("daily_goals")
     .update({
       description,
@@ -123,13 +123,41 @@ export const updateTodayDailyGoal = async (
   return toDailyGoal(data as DailyGoalRow);
 };
 
+export const getTodayDailyGoal = async (
+  roomId: string,
+  userId: string
+): Promise<DailyGoal> => {
+  await requireRoomMembership(roomId, userId);
+
+  const { data, error } = await supabaseAdmin
+    .from("daily_goals")
+    .select(DAILY_GOAL_COLUMNS)
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .eq("goal_date", getToday())
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new DailyGoalServiceError(
+      404,
+      "No daily goal exists for today"
+    );
+  }
+
+  return toDailyGoal(data as DailyGoalRow);
+};
+
 export const completeTodayDailyGoal = async (
   roomId: string,
   userId: string
 ): Promise<DailyGoal> => {
   await requireRoomMembership(roomId, userId);
 
-  const { data: existingGoal, error: lookupError } = await supabase
+  const { data: existingGoal, error: lookupError } = await supabaseAdmin
     .from("daily_goals")
     .select(DAILY_GOAL_COLUMNS)
     .eq("room_id", roomId)
@@ -154,7 +182,7 @@ export const completeTodayDailyGoal = async (
     return toDailyGoal(goal);
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("daily_goals")
     .update({
       is_completed: true,
@@ -226,7 +254,7 @@ export const getCurrentStreak = async (
   await requireRoomMembership(roomId, userId);
 
   const today = getToday();
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("daily_goals")
     .select(DAILY_GOAL_COLUMNS)
     .eq("room_id", roomId)

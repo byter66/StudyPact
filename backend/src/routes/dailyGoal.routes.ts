@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getDailyGoal,
   getDailyGoalStreak,
   patchDailyGoal,
   postCompleteDailyGoal,
@@ -9,8 +10,9 @@ import { requireAuth } from "../middleware/auth.middleware";
 
 const router = Router();
 
-router.post("/rooms/:roomId/daily-goal", postDailyGoal);
-router.patch("/rooms/:roomId/daily-goal", patchDailyGoal);
+router.post("/rooms/:roomId/daily-goal", requireAuth, postDailyGoal);
+router.patch("/rooms/:roomId/daily-goal", requireAuth, patchDailyGoal);
+router.get("/rooms/:roomId/daily-goal", requireAuth, getDailyGoal);
 router.post(
   "/rooms/:roomId/daily-goal/complete",
   requireAuth,

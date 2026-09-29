@@ -71,6 +71,8 @@ const StudyRoom = () => {
     const presenceSubscribedRef = useRef(false);
     const myStatusRef = useRef(myStatus);
     myStatusRef.current = myStatus;
+    const chatMessagesRef = useRef(null);
+    const chatWasNearBottomRef = useRef(true);
 
     useEffect(() => {
         let isCurrent = true;
@@ -284,6 +286,16 @@ const StudyRoom = () => {
             isCurrent = false;
         };
     }, [myStatus, presenceDisplayName, userId]);
+
+    useEffect(() => {
+        const element = chatMessagesRef.current;
+        if (!element || !chatWasNearBottomRef.current) return;
+
+        element.scrollTo({
+            top: element.scrollHeight,
+            behavior: messages.length > 1 ? 'smooth' : 'auto',
+        });
+    }, [messages]);
 
     useEffect(() => {
         if (!room) return undefined;
@@ -754,7 +766,18 @@ const StudyRoom = () => {
 
                     <div className="sr-chat">
                         <p className="sr-panel-label">Room chat</p>
-                        <div className="sr-chat-messages">
+                        <div
+                            ref={chatMessagesRef}
+                            className="sr-chat-messages"
+                            onScroll={(event) => {
+                                const element = event.currentTarget;
+                                const distanceFromBottom =
+                                    element.scrollHeight
+                                    - element.scrollTop
+                                    - element.clientHeight;
+                                chatWasNearBottomRef.current = distanceFromBottom <= 100;
+                            }}
+                        >
                             {messages.map((m) => (
                                 <div
                                     key={m.id}

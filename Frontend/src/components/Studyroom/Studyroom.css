@@ -4,6 +4,7 @@
 
 .sr-page {
     width: 100%;
+    height: 100vh;
     min-height: 100vh;
     background: #faf6ee;
     color: #211f1c;
@@ -11,6 +12,7 @@
     display: flex;
     flex-direction: column;
     padding: 16px 24px;
+    overflow: hidden;
 }
 
 /* ---------- Top bar ---------- */
@@ -491,12 +493,24 @@ a.sr-quick-card:hover {
 
 .sr-chat-messages {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
     margin-bottom: 10px;
     padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #d8cfbe transparent;
+}
+
+.sr-chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sr-chat-messages::-webkit-scrollbar-thumb {
+    background: #d8cfbe;
+    border-radius: 999px;
 }
 
 .sr-chat-message {
@@ -571,6 +585,7 @@ a.sr-quick-card:hover {
     .sr-page {
         height: auto;
         min-height: 100vh;
+        overflow: visible;
     }
 
     .sr-focus-panel {
