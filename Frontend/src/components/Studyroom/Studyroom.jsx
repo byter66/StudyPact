@@ -69,6 +69,10 @@ const StudyRoom = () => {
     const startedAtRef = useRef(null);
     const operationInProgressRef = useRef(false);
     const completionAttemptedRef = useRef(false);
+    const presenceChannelRef = useRef(null);
+    const presenceSubscribedRef = useRef(false);
+    const myStatusRef = useRef(myStatus);
+    myStatusRef.current = myStatus;
 
     useEffect(() => {
         let isCurrent = true;
@@ -86,7 +90,9 @@ const StudyRoom = () => {
                     activeMembers.set(presence.user_id, {
                         id: presence.user_id,
                         name: presence.display_name || 'StudyPact member',
-                        status: 'studying',
+                        status: STATUS_CYCLE.includes(presence.status)
+                            ? presence.status
+                            : 'studying',
                     });
                 });
             }
@@ -160,6 +166,8 @@ const StudyRoom = () => {
                 channel = supabase.channel(`room-presence:${roomId}`, {
                     config: { presence: { key: userId } },
                 });
+                presenceChannelRef.current = channel;
+                presenceSubscribedRef.current = false;
 
                 channel
                     .on('presence', { event: 'sync' }, handlePresenceChange)
@@ -171,9 +179,11 @@ const StudyRoom = () => {
 
                     if (status === 'SUBSCRIBED') {
                         setRealtimeError('');
+                        presenceSubscribedRef.current = true;
                         const { error } = await channel.track({
                             user_id: userId,
                             display_name: presenceDisplayName,
+                            status: myStatusRef.current,
                         });
                         if (!isCurrent) return;
                         if (error) {
@@ -213,11 +223,42 @@ const StudyRoom = () => {
 
         return () => {
             isCurrent = false;
+            presenceSubscribedRef.current = false;
+            presenceChannelRef.current = null;
             if (channel) {
                 supabase?.removeChannel(channel);
             }
         };
     }, [roomId, userId, presenceDisplayName]);
+
+    useEffect(() => {
+        const channel = presenceChannelRef.current;
+        if (!channel || !presenceSubscribedRef.current) return undefined;
+
+        let isCurrent = true;
+        const updatePresenceStatus = async () => {
+            try {
+                const { error } = await channel.track({
+                    user_id: userId,
+                    display_name: presenceDisplayName,
+                    status: myStatus,
+                });
+                if (isCurrent && error) {
+                    setRealtimeError('Unable to update your presence status. Please retry.');
+                }
+            } catch (error) {
+                if (isCurrent) {
+                    setRealtimeError(error.message || 'Unable to update your presence status. Please retry.');
+                }
+            }
+        };
+
+        void updatePresenceStatus();
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [myStatus, presenceDisplayName, userId]);
 
     useEffect(() => {
         if (!room) return undefined;
