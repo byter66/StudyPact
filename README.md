@@ -294,6 +294,19 @@ Never commit `.env` to the repository.
 npm run dev
 ```
 
+### Import mock exam questions
+
+Apply the Supabase migrations in `supabase/migrations/`, then from `backend/` validate and import the public JEE/NEET benchmark dataset:
+
+```bash
+npm run check:mock-dataset
+npm run import:mock-dataset
+```
+
+The importer copies source question images to the public Supabase Storage bucket `mock-question-images` and inserts dataset-derived papers/questions into the existing `mock_papers` and `mock_questions` tables. It keeps database paper IDs as generated UUIDs and records the Hugging Face dataset/question identifiers in `source_reference` and question metadata. Re-running the importer updates the matching paper groups instead of creating a second paper set.
+
+The benchmark provides JEE Advanced and NEET question images and answer metadata. It does not provide exam duration or total marks, so these are left unavailable; the session creator sets a duration before starting an exam. The `Abhay557/indian-exams-rawdata` source currently requires access (HTTP 401) and is not included by this importer.
+
 ### 6. Start the frontend
 
 ```bash

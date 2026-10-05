@@ -40,7 +40,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/mock-room/:id" element={<Mockroom />} />
+        <Route
+          path="/mock-room/:id"
+          element={
+            <ProtectedRoute>
+              <Mockroom />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/doubt-forum/:id" element={<Doubtforum />} />
       </Routes>
     </BrowserRouter>

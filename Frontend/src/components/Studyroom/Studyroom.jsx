@@ -13,6 +13,7 @@ import {
     leaveRoom,
 } from '../../services/roomService';
 import { getUserTasks, updateUserTask } from '../../services/userTaskService';
+import { createMockSessionForRoom, getAvailableMockPapers } from '../../services/mockExamService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import './StudyRoom.css';
@@ -52,6 +53,16 @@ const StudyRoom = () => {
     const [tasks, setTasks] = useState([]);
     const [tasksLoading, setTasksLoading] = useState(true);
     const [tasksError, setTasksError] = useState('');
+    const [availablePapers, setAvailablePapers] = useState([]);
+    const [paperSelectionLoading, setPaperSelectionLoading] = useState(false);
+    const [selectedPaperId, setSelectedPaperId] = useState('');
+    const [showPaperSelector, setShowPaperSelector] = useState(false);
+    const [paperSelectionError, setPaperSelectionError] = useState('');
+    const [creatingMockSession, setCreatingMockSession] = useState(false);
+    const [paperSource, setPaperSource] = useState('dataset');
+    const [paperSearch, setPaperSearch] = useState('');
+    const [examDurationMinutes, setExamDurationMinutes] = useState('');
+    const [customQuestionPaper, setCustomQuestionPaper] = useState(null);
 
     const [myStatus, setMyStatus] = useState('studying');
     const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
@@ -73,6 +84,40 @@ const StudyRoom = () => {
     myStatusRef.current = myStatus;
     const chatMessagesRef = useRef(null);
     const chatWasNearBottomRef = useRef(true);
+
+    useEffect(() => {
+        const loadAvailablePapers = async () => {
+            setPaperSelectionLoading(true);
+            try {
+                const papers = await getAvailableMockPapers();
+                setAvailablePapers(Array.isArray(papers) ? papers : []);
+                setSelectedPaperId((current) => current || '');
+            } catch (error) {
+                console.error('Unable to load mock papers:', error);
+                setAvailablePapers([]);
+                setPaperSelectionError(error.message || 'Unable to load available mock papers.');
+            } finally {
+                setPaperSelectionLoading(false);
+            }
+        };
+
+        void loadAvailablePapers();
+    }, []);
+
+    useEffect(() => {
+        if (!showPaperSelector) return undefined;
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape' && !creatingMockSession) {
+                setShowPaperSelector(false);
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        document.body.classList.add('sr-modal-open');
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.classList.remove('sr-modal-open');
+        };
+    }, [showPaperSelector, creatingMockSession]);
 
     useEffect(() => {
         let isCurrent = true;
@@ -538,6 +583,67 @@ const StudyRoom = () => {
         }
     };
 
+    const handleCreateMockSession = async () => {
+        if (!roomId) return;
+        const duration = Number(examDurationMinutes);
+        if (!Number.isInteger(duration) || duration < 1 || duration > 1440) {
+            setPaperSelectionError('Enter an exam duration between 1 minute and 24 hours.');
+            return;
+        }
+        if (paperSource === 'dataset' && !selectedPaperId) {
+            setPaperSelectionError('Please select a dataset question paper.');
+            return;
+        }
+        if (paperSource === 'custom' && !customQuestionPaper) {
+            setPaperSelectionError('Please choose a PDF question paper to upload.');
+            return;
+        }
+
+        setCreatingMockSession(true);
+        setPaperSelectionError('');
+        try {
+            const response = await createMockSessionForRoom(
+                roomId,
+                paperSource === 'dataset' ? selectedPaperId : null,
+                {
+                    durationSeconds: duration * 60,
+                    customPaper: paperSource === 'custom' ? customQuestionPaper : null,
+                },
+            );
+            const sessionId = response?.session?.id || response?.data?.session?.id || response?.data?.id;
+            if (!sessionId) {
+                throw new Error('The mock session could not be created.');
+            }
+            setShowPaperSelector(false);
+            navigate(`/mock-room/${sessionId}`);
+        } catch (error) {
+            console.error('Unable to create mock session:', error);
+            setPaperSelectionError(error.message || 'Unable to create the mock session.');
+        } finally {
+            setCreatingMockSession(false);
+        }
+    };
+
+    const handleCustomPaperChange = (event) => {
+        const file = event.target.files?.[0] ?? null;
+        setPaperSelectionError('');
+        if (!file) {
+            setCustomQuestionPaper(null);
+            return;
+        }
+        if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+            setCustomQuestionPaper(null);
+            setPaperSelectionError('Question paper must be a PDF file.');
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            setCustomQuestionPaper(null);
+            setPaperSelectionError('Question paper PDF must be 10 MB or smaller.');
+            return;
+        }
+        setCustomQuestionPaper(file);
+    };
+
     const sendMessage = async (e) => {
         e.preventDefault();
         const text = draft.trim();
@@ -717,10 +823,22 @@ const StudyRoom = () => {
                     )}
 
                     <div className="sr-quick-row">
-                        <Link to={`/mock-room/${roomId}`} className="sr-quick-card">
+                        <button
+                            type="button"
+                            className="sr-quick-card sr-quick-button"
+                            onClick={() => {
+                                setPaperSelectionError('');
+                                setSelectedPaperId('');
+                                setPaperSource('dataset');
+                                setPaperSearch('');
+                                setExamDurationMinutes('');
+                                setCustomQuestionPaper(null);
+                                setShowPaperSelector(true);
+                            }}
+                        >
                             <span className="sr-quick-title">Create Mock Room</span>
                             <span className="sr-quick-sub">Timed practice + peer review</span>
-                        </Link>
+                        </button>
                         <div className="sr-quick-card sr-quick-status">
                             <span className="sr-quick-title">Active submissions</span>
                             <span className="sr-quick-sub">2 in progress</span>
@@ -802,6 +920,200 @@ const StudyRoom = () => {
                 </aside>
 
             </div>
+
+            {showPaperSelector && (
+                <div
+                    className="sr-modal-backdrop"
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget && !creatingMockSession) {
+                            setShowPaperSelector(false);
+                        }
+                    }}
+                >
+                    <section
+                        className="sr-mock-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="sr-mock-modal-title"
+                        onMouseDown={(event) => event.stopPropagation()}
+                    >
+                        <header className="sr-mock-modal-header">
+                            <div>
+                                <p className="sr-modal-eyebrow">Study room mock exam</p>
+                                <h2 id="sr-mock-modal-title">Create Mock Exam</h2>
+                            </div>
+                            <button
+                                type="button"
+                                className="sr-modal-close"
+                                aria-label="Close dialog"
+                                onClick={() => setShowPaperSelector(false)}
+                                disabled={creatingMockSession}
+                            >
+                                ×
+                            </button>
+                        </header>
+
+                        <div className="sr-mock-modal-content">
+                            <fieldset className="sr-source-choice">
+                                <legend>Question paper source</legend>
+                                <label>
+                                    <input
+                                        type="radio"
+                                        name="paper-source"
+                                        value="dataset"
+                                        checked={paperSource === 'dataset'}
+                                        onChange={() => {
+                                            setPaperSource('dataset');
+                                            setPaperSelectionError('');
+                                        }}
+                                        disabled={creatingMockSession}
+                                    />
+                                    Choose from Dataset
+                                </label>
+                                <label>
+                                    <input
+                                        type="radio"
+                                        name="paper-source"
+                                        value="custom"
+                                        checked={paperSource === 'custom'}
+                                        onChange={() => {
+                                            setPaperSource('custom');
+                                            setPaperSelectionError('');
+                                        }}
+                                        disabled={creatingMockSession}
+                                    />
+                                    Upload Custom Paper
+                                </label>
+                            </fieldset>
+
+                            {paperSource === 'dataset' ? (
+                                <div className="sr-dataset-picker">
+                                    <label className="sr-paper-select-label" htmlFor="mock-paper-search">
+                                        Choose Question Paper
+                                        <input
+                                            id="mock-paper-search"
+                                            className="sr-paper-select"
+                                            type="search"
+                                            placeholder="Search exam, year, paper or subject"
+                                            value={paperSearch}
+                                            onChange={(event) => setPaperSearch(event.target.value)}
+                                            disabled={creatingMockSession}
+                                        />
+                                    </label>
+                                    {paperSelectionLoading ? (
+                                        <p className="sr-paper-empty" role="status">Loading available papers...</p>
+                                    ) : paperSelectionError ? null : availablePapers.length === 0 ? (
+                                        <p className="sr-paper-empty">No question papers are currently available.</p>
+                                    ) : (
+                                        <div className="sr-dataset-paper-list" role="listbox" aria-label="Dataset question papers">
+                                            {availablePapers
+                                                .filter((paper) => `${paper.examTag} ${paper.examYear ?? ''} ${paper.paperName || paper.title} ${paper.subject} ${paper.evaluationType}`
+                                                    .toLowerCase()
+                                                    .includes(paperSearch.trim().toLowerCase()))
+                                                .map((paper) => (
+                                                    <button
+                                                        key={paper.id}
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={selectedPaperId === paper.id}
+                                                        className={`sr-dataset-paper-option ${selectedPaperId === paper.id ? 'sr-dataset-paper-option-selected' : ''}`}
+                                                        onClick={() => {
+                                                            setSelectedPaperId(paper.id);
+                                                            if (paper.durationMinutes) setExamDurationMinutes(String(paper.durationMinutes));
+                                                        }}
+                                                        disabled={creatingMockSession}
+                                                    >
+                                                        <span className="sr-dataset-paper-name">{paper.examTag} {paper.examYear ?? ''} · {paper.paperName || paper.title}</span>
+                                                        <span className="sr-dataset-paper-meta">
+                                                            {paper.subject || 'Subject not provided'} · {paper.questions?.length ?? 0} questions
+                                                            {paper.evaluationType ? ` · ${paper.evaluationType}` : ''}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    )}
+                                    {selectedPaperId && (() => {
+                                        const paper = availablePapers.find((item) => item.id === selectedPaperId);
+                                        if (!paper) return null;
+                                        return (
+                                            <div className="sr-selected-paper" aria-live="polite">
+                                                <strong>{paper.examTag} {paper.examYear ?? ''}</strong>
+                                                <span>{paper.paperName || paper.title} · {paper.subject || 'Subject not provided'}</span>
+                                                <span>Evaluation: {paper.evaluationType || 'Not provided'}</span>
+                                                <span>{paper.totalMarks ? `${paper.totalMarks} marks` : 'Total marks not provided by source'}</span>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            ) : (
+                                <div className="sr-custom-paper-picker">
+                                    <label className="sr-custom-paper-label" htmlFor="custom-question-paper">
+                                        Upload Question Paper
+                                        <input
+                                            id="custom-question-paper"
+                                            type="file"
+                                            accept="application/pdf,.pdf"
+                                            onChange={handleCustomPaperChange}
+                                            disabled={creatingMockSession}
+                                        />
+                                    </label>
+                                    <p>This PDF is the question paper shown to everyone in this mock room. It is not your answer script.</p>
+                                    {customQuestionPaper && (
+                                        <p className="sr-custom-paper-file" role="status">
+                                            Selected: {customQuestionPaper.name} ({Math.ceil(customQuestionPaper.size / 1024)} KB)
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            <label className="sr-paper-select-label" htmlFor="mock-exam-duration">
+                                Duration (minutes)
+                                <input
+                                    id="mock-exam-duration"
+                                    className="sr-paper-select sr-duration-input"
+                                    type="number"
+                                    min="1"
+                                    max="1440"
+                                    step="1"
+                                    placeholder="Enter duration"
+                                    value={examDurationMinutes}
+                                    onChange={(event) => setExamDurationMinutes(event.target.value)}
+                                    disabled={creatingMockSession}
+                                />
+                            </label>
+                            <p className="sr-duration-note">The exam stays in draft until the creator clicks Start Exam.</p>
+                            {paperSelectionError && <p className="sr-paper-error" role="alert">{paperSelectionError}</p>}
+                        </div>
+
+                        <footer className="sr-paper-actions sr-modal-actions">
+                            <button
+                                type="button"
+                                className="sr-btn sr-btn-outline"
+                                onClick={() => setShowPaperSelector(false)}
+                                disabled={creatingMockSession}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="sr-btn sr-btn-primary"
+                                disabled={
+                                    creatingMockSession
+                                    || paperSelectionLoading && paperSource === 'dataset'
+                                    || !Number.isInteger(Number(examDurationMinutes))
+                                    || Number(examDurationMinutes) < 1
+                                    || Number(examDurationMinutes) > 1440
+                                    || paperSource === 'dataset' && (!selectedPaperId || !availablePapers.some((paper) => paper.id === selectedPaperId))
+                                    || paperSource === 'custom' && !customQuestionPaper
+                                }
+                                onClick={handleCreateMockSession}
+                            >
+                                {creatingMockSession ? 'Creating...' : 'Create Mock Exam'}
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            )}
         </div>
     );
 };

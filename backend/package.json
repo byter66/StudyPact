@@ -8,7 +8,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:mock-dataset": "node scripts/import-mock-dataset.mjs --dry-run",
+    "import:mock-dataset": "node scripts/import-mock-dataset.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",

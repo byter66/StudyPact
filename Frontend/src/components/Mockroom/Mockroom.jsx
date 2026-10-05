@@ -1,202 +1,407 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import './MockRoom.css';
+import { useAuth } from '../../context/AuthContext';
+import {
+  getMockSession,
+  startMockSession,
+  submitAnswerScript,
+} from '../../services/mockExamService';
+import './Mockroom.css';
 
-const MOCK_PAPER = {
-    title: 'UPSC Prelims — Polity Mock Paper 3',
-    examTag: 'UPSC',
-    durationMinutes: 30,
-    question:
-        "Q1. With reference to the Indian Constitution, consider the following statements:\n\n1. The Directive Principles of State Policy are non-justiciable.\n2. Fundamental Rights can be amended under Article 368.\n3. The Ninth Schedule places laws beyond judicial review in all cases.\n\nWhich of the statements given above is/are correct?\n\n(a) 1 and 2 only\n(b) 2 only\n(c) 1 and 3 only\n(d) 1, 2 and 3",
+const MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024;
+
+const formatTime = (seconds) => {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const remainingSeconds = (seconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${remainingSeconds}`;
 };
 
-const UPLOAD_WINDOW_SECONDS = 5 * 60; // 5 min to upload after time's up, per wireframe
+const formatFileSize = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** index;
+  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+};
 
 const MockRoom = () => {
-    const { id } = useParams();
+  const { id } = useParams();
+  const { user } = useAuth();
+  const sessionId = id;
 
-    const [phase, setPhase] = useState('idle'); // idle | running | uploadWindow | submitted
-    const [secondsLeft, setSecondsLeft] = useState(MOCK_PAPER.durationMinutes * 60);
-    const [uploadSecondsLeft, setUploadSecondsLeft] = useState(UPLOAD_WINDOW_SECONDS);
-    const [answerText, setAnswerText] = useState('');
-    const intervalRef = useRef(null);
+  const [sessionData, setSessionData] = useState(null);
+  const [paper, setPaper] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [error, setError] = useState('');
+  const [submission, setSubmission] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [phase, setPhase] = useState('loading');
+  const [examDurationMinutes, setExamDurationMinutes] = useState('');
+  const [isStartingExam, setIsStartingExam] = useState(false);
+  const fileInputRef = useRef(null);
+  const timerRef = useRef(null);
 
-    const formatTime = (secs) => {
-        const m = Math.floor(secs / 60).toString().padStart(2, '0');
-        const s = (secs % 60).toString().padStart(2, '0');
-        return `${m}:${s}`;
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSession = async () => {
+      if (!sessionId) {
+        if (isMounted) {
+          setSessionLoading(false);
+          setError('Mock session not found.');
+        }
+        return;
+      }
+
+      try {
+        const response = await getMockSession(sessionId);
+        const payload = response?.data ?? response;
+        const session = payload?.session;
+        const nextPaper = payload?.paper;
+        const nextSubmission = payload?.submission ?? null;
+        if (!session || !nextPaper || !Array.isArray(nextPaper.questions)) {
+          throw new Error('Mock session response is missing its selected paper or question list.');
+        }
+        if (!nextPaper.documentUrl && nextPaper.questions.length === 0) {
+          throw new Error('The selected paper response contains no questions or question-paper PDF.');
+        }
+
+        if (!isMounted) return;
+
+        setSessionData({ ...session, attempt: payload.attempt ?? null });
+        setPaper(nextPaper);
+        setSubmission(nextSubmission);
+
+        const sessionEndsAt = session?.endsAt || payload?.endsAt || null;
+        const now = Date.now();
+        const secondsLeft = sessionEndsAt ? Math.max(0, Math.ceil((new Date(sessionEndsAt).getTime() - now) / 1000)) : 0;
+        setTimeRemaining(secondsLeft);
+        setExamDurationMinutes(session?.durationSeconds
+          ? String(Math.ceil(session.durationSeconds / 60))
+          : '');
+
+        if (session?.status === 'expired' || session?.status === 'completed') {
+          setPhase('expired');
+        } else if (session?.status === 'draft') {
+          setPhase('draft');
+        } else if (session?.status === 'live' && secondsLeft <= 0) {
+          setPhase('expired');
+        } else if (session?.status === 'live') {
+          setPhase('live');
+        } else {
+          throw new Error('The mock session has an unsupported state.');
+        }
+      } catch (loadError) {
+        if (isMounted) {
+          setError(loadError?.message || 'Unable to load the mock session.');
+        }
+      } finally {
+        if (isMounted) {
+          setSessionLoading(false);
+        }
+      }
     };
 
-    // Main exam timer
-    useEffect(() => {
-        if (phase !== 'running') return;
-        intervalRef.current = setInterval(() => {
-            setSecondsLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(intervalRef.current);
-                    setPhase('uploadWindow');
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-        return () => clearInterval(intervalRef.current);
-    }, [phase]);
+    loadSession();
+    return () => {
+      isMounted = false;
+    };
+  }, [sessionId]);
 
-    // Upload grace window, once main timer hits zero
-    useEffect(() => {
-        if (phase !== 'uploadWindow') return;
-        intervalRef.current = setInterval(() => {
-            setUploadSecondsLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(intervalRef.current);
-                    setPhase('submitted');
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-        return () => clearInterval(intervalRef.current);
-    }, [phase]);
+  useEffect(() => {
+    if (!sessionData || phase !== 'live') return undefined;
 
-    const handleGo = () => setPhase('running');
+    const updateTimer = () => {
+      const endsAt = sessionData?.endsAt || sessionData?.session?.endsAt || null;
+      if (!endsAt) return;
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        clearInterval(intervalRef.current);
+      const remaining = Math.max(0, Math.ceil((new Date(endsAt).getTime() - Date.now()) / 1000));
+      setTimeRemaining(remaining);
+      if (remaining <= 0) {
+        setPhase('expired');
+      }
+    };
+
+    updateTimer();
+    timerRef.current = window.setInterval(updateTimer, 1000);
+    return () => window.clearInterval(timerRef.current);
+  }, [sessionData, phase]);
+
+  const handleStartExam = async () => {
+    const durationMinutes = Number(examDurationMinutes);
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
+      setError('Enter an exam duration between 1 minute and 24 hours.');
+      return;
+    }
+
+    setError('');
+    setIsStartingExam(true);
+    try {
+      const response = await startMockSession(sessionId, durationMinutes * 60);
+      const startedSession = response?.session || response;
+      if (!startedSession?.id || !startedSession?.endsAt) {
+        throw new Error('The server did not return the started mock session.');
+      }
+
+      setSessionData((current) => ({ ...current, ...startedSession }));
+      setTimeRemaining(Math.max(0, Math.ceil((new Date(startedSession.endsAt).getTime() - Date.now()) / 1000)));
+      setPhase('live');
+    } catch (startError) {
+      setError(startError?.message || 'Unable to start the mock exam.');
+    } finally {
+      setIsStartingExam(false);
+    }
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    setError('');
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    if (file.type !== 'application/pdf') {
+      setSelectedFile(null);
+      setError('Wrong file type. Please upload a PDF answer script.');
+      return;
+    }
+
+    if (file.size > MAX_PDF_SIZE_BYTES) {
+      setSelectedFile(null);
+      setError('File too large. Please upload a PDF under 10 MB.');
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
+  const handleSubmitPdf = async () => {
+    if (!selectedFile || !sessionData || !sessionData.attempt || !sessionData.attempt.id) {
+      setError('The current session is not ready for PDF submission.');
+      return;
+    }
+
+    setError('');
+    setIsSubmitting(true);
+    setStatusMessage('Uploading...');
+
+    try {
+      const response = await submitAnswerScript({
+        attemptId: sessionData.attempt.id,
+        sessionId: sessionData.id || sessionId,
+        file: selectedFile,
+      });
+
+      if (response?.status === 'SUBMITTED' || response?.data?.status === 'SUBMITTED' || response?.id) {
+        setSubmission(response?.data || response || null);
         setPhase('submitted');
-    };
+        setStatusMessage('✓ Answer script submitted');
+      } else {
+        throw new Error(response?.message || 'Upload failed.');
+      }
+    } catch (submitError) {
+      setError(submitError?.message || 'Upload failed. Please try again.');
+      setStatusMessage('');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
+  const totalDuration = sessionData?.durationSeconds || 1800;
+  const showUploadPanel = phase === 'expired' || phase === 'submitted';
+
+  if (sessionLoading) {
     return (
-        <div className="mr-page">
-
-            <header className="mr-topbar">
-                <div className="mr-room-info">
-                    <span className="mr-badge">{MOCK_PAPER.examTag}</span>
-                    <h1 className="mr-title">{MOCK_PAPER.title}</h1>
-                </div>
-                <Link to={`/study-room/${id || 'r1'}`} className="mr-link-btn">Back to room</Link>
-            </header>
-
-            <div className="mr-body">
-
-                {/* Question paper panel */}
-                <section className="mr-panel mr-question-panel">
-                    <p className="mr-panel-label">Question paper</p>
-                    <div className="mr-question-text">
-                        {MOCK_PAPER.question.split('\n').map((line, i) => (
-                            <p key={i}>{line || '\u00A0'}</p>
-                        ))}
-                    </div>
-                </section>
-
-                {/* Answer + timer panel */}
-                <section className="mr-panel mr-answer-panel">
-
-                    <div className="mr-timer-block">
-                        <div className="mr-timer-ring-wrapper">
-                            <svg className="mr-timer-ring" viewBox="0 0 100 100">
-                                <circle className="mr-ring-bg" cx="50" cy="50" r="44" />
-                                <circle
-                                    className={`mr-ring-progress ${phase === 'uploadWindow' ? 'mr-ring-urgent' : ''}`}
-                                    cx="50" cy="50" r="44"
-                                    style={{
-                                        strokeDashoffset:
-                                            phase === 'uploadWindow'
-                                                ? 276 - (276 * uploadSecondsLeft) / UPLOAD_WINDOW_SECONDS
-                                                : 276 - (276 * secondsLeft) / (MOCK_PAPER.durationMinutes * 60),
-                                    }}
-                                />
-                            </svg>
-                            <div className="mr-timer-center">
-                                <span className="mr-timer-value">
-                                    {phase === 'uploadWindow' ? formatTime(uploadSecondsLeft) : formatTime(secondsLeft)}
-                                </span>
-                                <span className="mr-timer-caption">
-                                    {phase === 'idle' && 'Not started'}
-                                    {phase === 'running' && 'Time remaining'}
-                                    {phase === 'uploadWindow' && 'Upload window'}
-                                    {phase === 'submitted' && 'Submitted'}
-                                </span>
-                            </div>
-                        </div>
-
-                        {phase === 'idle' && (
-                            <button className="mr-btn mr-btn-primary mr-go-btn" onClick={handleGo}>
-                                Go
-                            </button>
-                        )}
-                    </div>
-
-                    <form className="mr-answer-form" onSubmit={handleSubmit}>
-                        <label className="mr-field-label" htmlFor="answer">
-                            Your answer
-                        </label>
-                        <textarea
-                            id="answer"
-                            className="mr-answer-input"
-                            placeholder={phase === 'idle' ? 'Click Go to start the timer' : 'Write your answer here...'}
-                            value={answerText}
-                            onChange={(e) => setAnswerText(e.target.value)}
-                            disabled={phase === 'idle' || phase === 'submitted'}
-                            rows={8}
-                        />
-
-                        <div className="mr-answer-tabs">
-                            <span className="mr-tab mr-tab-active">Written</span>
-                            <span className="mr-tab">Attachments</span>
-                        </div>
-
-                        <button
-                            type="submit"
-                            className="mr-btn mr-btn-primary mr-submit-btn"
-                            disabled={phase === 'idle' || phase === 'submitted'}
-                        >
-                            {phase === 'submitted' ? 'Submitted' : 'Submit'}
-                        </button>
-                    </form>
-
-                    <div className="mr-note">
-                        {phase === 'uploadWindow' && (
-                            <p className="mr-note-urgent">
-                                Time's up — you have {formatTime(uploadSecondsLeft)} left to upload your answer or exit now.
-                            </p>
-                        )}
-                        <p className="mr-note-sub">
-                            Feedback and rubric scores become visible only once all attempters' papers are reviewed.
-                        </p>
-                    </div>
-
-                   <Link
-    to={`/doubt-forum/${id}`}
-    style={{
-        width: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        background: '#f1ebdd',
-        borderRadius: '10px',
-        padding: '12px 14px',
-        marginTop: '12px',
-        textDecoration: 'none',
-        boxSizing: 'border-box',
-    }}
->
-    <span style={{ fontSize: '18px', color: '#211f1c' }}>💬</span>
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <span style={{ fontSize: '13px', fontWeight: 700, color: '#211f1c' }}>
-            Stuck on this question?
-        </span>
-        <span style={{ fontSize: '11.5px', color: '#8a8474' }}>
-            Ask in the Doubt Forum
-        </span>
-    </div>
-</Link>
-
-                </section>
-            </div>
-        </div>
+      <div className="mr-page">
+        <div className="mr-loading">Loading mock session…</div>
+      </div>
     );
+  }
+
+  if (!sessionData && !paper) {
+    return (
+      <div className="mr-page">
+        <div className="mr-loading" role={error ? 'alert' : 'status'}>
+          {error || 'Mock session not found.'}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mr-page">
+      <header className="mr-topbar">
+        <div className="mr-room-info">
+          <span className="mr-badge">{paper?.examTag || 'Mock'}</span>
+          <h1 className="mr-title">
+            {paper ? `${paper.examTag} ${paper.examYear ?? ''} · ${paper.paperName || paper.title}` : 'Mock Exam'}
+          </h1>
+        </div>
+        <Link to={sessionData?.roomId ? `/study-room/${sessionData.roomId}` : '/dashboard'} className="mr-link-btn">
+          Back to room
+        </Link>
+      </header>
+
+      <div className={`mr-body ${phase === 'draft' || showUploadPanel ? 'mr-body-single' : ''}`}>
+        <section className="mr-panel mr-paper-panel">
+          <div className="mr-panel-header">
+            <p className="mr-panel-label">Question paper</p>
+            <span className="mr-progress-badge">
+              {showUploadPanel ? 'Answer submission' : 'Question paper'}
+            </span>
+          </div>
+
+          {showUploadPanel ? (
+            <div className="mr-upload-panel">
+              <p className="mr-upload-title">Answer submission</p>
+              <p className="mr-upload-text">Upload your completed answer script as a PDF.</p>
+
+              <label className="mr-upload-input-label">
+                <input ref={fileInputRef} type="file" accept="application/pdf" onChange={handleFileChange} />
+                <span>[ Choose PDF ]</span>
+              </label>
+
+              {selectedFile ? (
+                <div className="mr-file-info">
+                  <p>Selected: {selectedFile.name}</p>
+                  <p>{formatFileSize(selectedFile.size)}</p>
+                </div>
+              ) : null}
+
+              {error ? <div className="mr-error-box" role="alert">{error}</div> : null}
+
+              {statusMessage ? <div className="mr-success-box">{statusMessage}</div> : null}
+
+              {submission ? (
+                <div className="mr-submission-box">
+                  <p>Submission ID: {submission.id || submission.data?.id}</p>
+                  <p>Status: {submission.status || submission.data?.status || 'SUBMITTED'}</p>
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                className="mr-btn mr-btn-primary"
+                onClick={handleSubmitPdf}
+                disabled={!selectedFile || isSubmitting}
+              >
+                {isSubmitting ? 'Uploading...' : 'Submit Answer Script'}
+              </button>
+            </div>
+          ) : paper?.documentUrl ? (
+            <iframe
+              className="mr-question-paper-pdf"
+              title={`Question paper: ${paper.paperName || paper.title}`}
+              src={paper.documentUrl}
+            />
+          ) : paper?.questions?.length ? (
+            <div className="mr-paper-display">
+              {phase === 'draft' && (
+                <div className="mr-draft-notice" role="status">
+                  Exam not started yet. This is the selected question paper.
+                </div>
+              )}
+              {paper.questions.map((question, index) => (
+                <div key={question.id || index} className="mr-paper-question">
+                  <p className="mr-question-number">Q{index + 1}</p>
+                  <p className="mr-question-subject">{question.subject}</p>
+                  {question.imageUrl ? (
+                    <img
+                      className="mr-source-question-image"
+                      src={question.imageUrl}
+                      alt={`Source question ${question.question}`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <p className="mr-question-text-block">{question.question}</p>
+                  )}
+                  {!question.imageUrl && question.options?.length ? (
+                    <ul className="mr-options-list-paper">
+                      {question.options.map((option) => (
+                        <li key={option}>{option}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mr-draft-notice" role="alert">
+              The selected paper response did not include its questions or PDF. Reload the session or contact support.
+            </p>
+          )}
+        </section>
+
+        {phase === 'draft' && (
+          <section className="mr-panel mr-start-panel">
+            <p className="mr-panel-label">Ready to begin?</p>
+            {sessionData?.createdBy === user?.id ? (
+              <>
+                <label className="mr-duration-label" htmlFor="exam-duration-minutes">
+                  Exam duration (minutes)
+                  <input
+                    id="exam-duration-minutes"
+                    type="number"
+                    min="1"
+                    max="1440"
+                    step="1"
+                    value={examDurationMinutes}
+                    onChange={(event) => setExamDurationMinutes(event.target.value)}
+                    disabled={isStartingExam}
+                  />
+                </label>
+                <p className="mr-duration-help">
+                  The source dataset does not specify a duration. Set the shared exam timer before starting.
+                </p>
+                {error ? <div className="mr-error-box" role="alert">{error}</div> : null}
+                <button
+                  type="button"
+                  className="mr-btn mr-btn-primary"
+                  onClick={handleStartExam}
+                  disabled={isStartingExam || !examDurationMinutes}
+                >
+                  {isStartingExam ? 'Starting...' : 'Start Exam'}
+                </button>
+              </>
+            ) : (
+              <p className="mr-draft-notice" role="status">
+                The session creator will choose the duration and start the exam.
+              </p>
+            )}
+          </section>
+        )}
+
+        {phase === 'live' && (
+          <section className="mr-panel mr-timer-panel">
+            <div className="mr-timer-card">
+              <div className="mr-timer-ring-wrapper">
+                <svg className="mr-timer-ring" viewBox="0 0 100 100">
+                  <circle className="mr-ring-bg" cx="50" cy="50" r="44" />
+                  <circle
+                    className="mr-ring-progress"
+                    cx="50"
+                    cy="50"
+                    r="44"
+                    style={{
+                      strokeDashoffset: 276 - (276 * Math.min(timeRemaining, totalDuration)) / totalDuration,
+                    }}
+                  />
+                </svg>
+                <div className="mr-timer-center">
+                  <span className="mr-timer-value">{formatTime(timeRemaining)}</span>
+                  <span className="mr-timer-caption">Time remaining</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default MockRoom;
