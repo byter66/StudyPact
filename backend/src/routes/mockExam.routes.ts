@@ -4,6 +4,8 @@ import {
   createMockSessionHandler,
   getMockExam,
   getPeerEvaluationAssignmentHandler,
+  getEvaluationDiscussionMessagesHandler,
+  createEvaluationDiscussionMessageHandler,
   getPeerEvaluationOverviewHandler,
   getMockSessionDetails,
   getMockSubmission,
@@ -26,6 +28,8 @@ router.post("/rooms/:roomId/sessions/:sessionId/join", requireAuth, joinMockSess
 router.post("/sessions/:sessionId/start", requireAuth, startMockSessionHandler);
 router.get("/sessions/:sessionId/peer-evaluations", requireAuth, getPeerEvaluationOverviewHandler);
 router.get("/sessions/:sessionId/peer-evaluations/:assignmentId", requireAuth, getPeerEvaluationAssignmentHandler);
+router.get("/sessions/:sessionId/peer-evaluations/:assignmentId/discussion", requireAuth, getEvaluationDiscussionMessagesHandler);
+router.post("/sessions/:sessionId/peer-evaluations/:assignmentId/discussion", requireAuth, createEvaluationDiscussionMessageHandler);
 router.put("/sessions/:sessionId/peer-evaluations/:assignmentId/draft", requireAuth, savePeerEvaluationDraftHandler);
 router.post("/sessions/:sessionId/peer-evaluations/:assignmentId", requireAuth, submitPeerEvaluationHandler);
 router.get("/sessions/:sessionId", requireAuth, getMockSessionDetails);

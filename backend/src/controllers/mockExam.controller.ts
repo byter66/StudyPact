@@ -7,6 +7,8 @@ import {
   getMockPaperById,
   getMockPapers,
   getPeerEvaluationAssignment,
+  getEvaluationDiscussionMessages,
+  createEvaluationDiscussionMessage,
   getPeerEvaluationOverview,
   getMockSessionTiming,
   getOrCreateAttempt,
@@ -19,6 +21,50 @@ import {
   submitPeerEvaluation,
   uploadAndStoreMockSubmission,
 } from "../services/mockExam.service";
+
+export const getEvaluationDiscussionMessagesHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const rawSessionId = req.params.sessionId;
+    const rawAssignmentId = req.params.assignmentId;
+    const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+    const assignmentId = Array.isArray(rawAssignmentId) ? rawAssignmentId[0] : rawAssignmentId;
+    if (!userId) return res.status(401).json({ success: false, message: "Authentication required." });
+    if (!sessionId || !assignmentId) {
+      return res.status(400).json({ success: false, message: "sessionId and assignmentId are required." });
+    }
+    const messages = await getEvaluationDiscussionMessages(sessionId, assignmentId, userId);
+    return res.status(200).json({ success: true, data: messages });
+  } catch (error: any) {
+    const message = error?.message || "Unable to load the evaluation discussion.";
+    const status = message.includes("not authorized") ? 403 : message.includes("not found") ? 404 : 500;
+    if (status === 500) console.error("Unable to load evaluation discussion:", error);
+    return res.status(status).json({ success: false, message: status === 500 ? "Unable to load the evaluation discussion." : message });
+  }
+};
+
+export const createEvaluationDiscussionMessageHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const rawSessionId = req.params.sessionId;
+    const rawAssignmentId = req.params.assignmentId;
+    const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+    const assignmentId = Array.isArray(rawAssignmentId) ? rawAssignmentId[0] : rawAssignmentId;
+    if (!userId) return res.status(401).json({ success: false, message: "Authentication required." });
+    if (!sessionId || !assignmentId || typeof req.body?.content !== "string") {
+      return res.status(400).json({ success: false, message: "sessionId, assignmentId, and content are required." });
+    }
+    const message = await createEvaluationDiscussionMessage(sessionId, assignmentId, userId, req.body.content);
+    return res.status(201).json({ success: true, data: message });
+  } catch (error: any) {
+    const message = error?.message || "Unable to send the evaluation discussion message.";
+    const status = message.includes("not authorized") ? 403
+      : message.includes("between 1 and 5000") ? 400
+        : message.includes("not found") || message.includes("does not belong") ? 404 : 500;
+    if (status === 500) console.error("Unable to create evaluation discussion message:", error);
+    return res.status(status).json({ success: false, message: status === 500 ? "Unable to send the evaluation discussion message." : message });
+  }
+};
 
 export const getMockExam = async (_req: Request, res: Response) => {
   const papers = await getMockPapers();

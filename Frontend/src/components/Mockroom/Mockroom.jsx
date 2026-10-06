@@ -2,14 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
+  getEvaluationDiscussion,
   getPeerEvaluation,
   getPeerEvaluations,
   getMockSession,
+  postEvaluationDiscussionMessage,
   savePeerEvaluationDraft,
   startMockSession,
   submitPeerEvaluation,
   submitAnswerScript,
 } from '../../services/mockExamService';
+import { supabase } from '../../services/supabaseClient';
 import './Mockroom.css';
 
 const MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024;
@@ -46,6 +49,14 @@ const MockRoom = () => {
   const [evaluationScores, setEvaluationScores] = useState({});
   const [evaluationComments, setEvaluationComments] = useState('');
   const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
+  const [discussionAssignment, setDiscussionAssignment] = useState(null);
+  const [discussionMessages, setDiscussionMessages] = useState([]);
+  const [discussionLoading, setDiscussionLoading] = useState(false);
+  const [discussionSending, setDiscussionSending] = useState(false);
+  const [discussionDraft, setDiscussionDraft] = useState('');
+  const [discussionError, setDiscussionError] = useState('');
+  const discussionRetryTimerRef = useRef(null);
+  const discussionRetryCountRef = useRef(0);
   const [submission, setSubmission] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -209,6 +220,80 @@ const MockRoom = () => {
   }, [sessionId, sessionData, phase]);
 
   useEffect(() => {
+    const assignmentId = discussionAssignment?.assignmentId;
+    if (!assignmentId || !sessionId) return undefined;
+
+    let isCurrent = true;
+    let channel = null;
+    const loadDiscussion = async () => {
+      setDiscussionLoading(true);
+      setDiscussionError('');
+      try {
+        const messages = await getEvaluationDiscussion(sessionId, assignmentId);
+        if (isCurrent) setDiscussionMessages(messages);
+      } catch (loadError) {
+        if (isCurrent) setDiscussionError(loadError?.message || 'Unable to load the discussion.');
+      } finally {
+        if (isCurrent) setDiscussionLoading(false);
+      }
+    };
+    const refreshDiscussion = async () => {
+      try {
+        const messages = await getEvaluationDiscussion(sessionId, assignmentId);
+        if (isCurrent) {
+          setDiscussionMessages((current) => {
+            const byId = new Map(current.map((message) => [message.id, message]));
+            messages.forEach((message) => byId.set(message.id, message));
+            return [...byId.values()].sort((left, right) => (
+              new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+            ));
+          });
+          setDiscussionError('');
+        }
+      } catch (loadError) {
+        if (isCurrent) setDiscussionError(loadError?.message || 'Unable to refresh the discussion.');
+      }
+    };
+    const subscribeToDiscussion = () => {
+      if (!isCurrent || !supabase) return;
+      const subscribedChannel = supabase
+        .channel(`evaluation-discussion:${assignmentId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'evaluation_discussion_messages',
+          filter: `assignment_id=eq.${assignmentId}`,
+        }, () => {
+          void refreshDiscussion();
+        });
+      channel = subscribedChannel;
+      subscribedChannel.subscribe((status) => {
+        if (!isCurrent || status === 'SUBSCRIBED') return;
+        if (!['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)
+          || discussionRetryCountRef.current >= 3
+          || discussionRetryTimerRef.current) return;
+        discussionRetryCountRef.current += 1;
+        discussionRetryTimerRef.current = window.setTimeout(async () => {
+          discussionRetryTimerRef.current = null;
+          if (!isCurrent) return;
+          await supabase.removeChannel(subscribedChannel);
+          await refreshDiscussion();
+          subscribeToDiscussion();
+        }, discussionRetryCountRef.current * 1000);
+      });
+    };
+
+    void loadDiscussion().then(() => subscribeToDiscussion());
+    return () => {
+      isCurrent = false;
+      if (discussionRetryTimerRef.current) window.clearTimeout(discussionRetryTimerRef.current);
+      discussionRetryTimerRef.current = null;
+      discussionRetryCountRef.current = 0;
+      if (channel) void supabase?.removeChannel(channel);
+    };
+  }, [discussionAssignment, sessionId]);
+
+  useEffect(() => {
     if (!activePeerAssignment || isSubmittingEvaluation) return undefined;
     if (draftSaveTimerRef.current) {
       window.clearTimeout(draftSaveTimerRef.current);
@@ -344,9 +429,48 @@ const MockRoom = () => {
       });
       setEvaluationScores(savedScores);
       setEvaluationComments(evaluation.comments || '');
+      setDiscussionAssignment({
+        assignmentId: evaluation.assignmentId,
+        participantName: evaluation.participantName,
+      });
     } catch (loadError) {
       console.error('Unable to open peer evaluation:', loadError);
       setPeerEvaluationError(loadError?.message || 'Unable to open this peer evaluation.');
+    }
+  };
+
+  const handleOpenAuthorDiscussion = (evaluation) => {
+    setDiscussionError('');
+    setDiscussionAssignment({
+      assignmentId: evaluation.assignmentId,
+      participantName: evaluation.evaluator,
+    });
+  };
+
+  const handleSendDiscussionMessage = async (event) => {
+    event.preventDefault();
+    const content = discussionDraft.trim();
+    if (!content || discussionSending || !discussionAssignment) return;
+    setDiscussionSending(true);
+    setDiscussionError('');
+    try {
+      const message = await postEvaluationDiscussionMessage(
+        sessionId,
+        discussionAssignment.assignmentId,
+        content,
+      );
+      setDiscussionMessages((current) => (
+        current.some((item) => item.id === message.id)
+          ? current
+          : [...current, message].sort((left, right) => (
+            new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+          ))
+      ));
+      setDiscussionDraft('');
+    } catch (sendError) {
+      setDiscussionError(sendError?.message || 'Unable to send the discussion message.');
+    } finally {
+      setDiscussionSending(false);
     }
   };
 
@@ -563,6 +687,13 @@ const MockRoom = () => {
                                     ))}
                                   </ul>
                                 ) : null}
+                                <button
+                                  type="button"
+                                  className="mr-btn mr-btn-secondary mr-peer-discussion-open"
+                                  onClick={() => handleOpenAuthorDiscussion(evaluation)}
+                                >
+                                  Discuss this feedback
+                                </button>
                               </li>
                             ))}
                           </ul>
@@ -616,6 +747,50 @@ const MockRoom = () => {
                         {isSubmittingEvaluation ? 'Submitting...' : 'Submit Evaluation'}
                       </button>
                     </form>
+                  ) : null}
+                  {discussionAssignment ? (
+                    <section className="mr-peer-discussion" aria-labelledby="mr-peer-discussion-title">
+                      <h3 id="mr-peer-discussion-title">
+                        Discussion about {discussionAssignment.participantName}'s evaluation
+                      </h3>
+                      {discussionLoading ? <p>Loading discussion...</p> : null}
+                      {discussionError ? <p className="mr-peer-error" role="alert">{discussionError}</p> : null}
+                      {!discussionLoading && !discussionMessages.length ? (
+                        <p>No messages yet. Start the discussion about this evaluation.</p>
+                      ) : null}
+                      <div className="mr-peer-discussion-messages" aria-live="polite">
+                        {discussionMessages.map((message) => (
+                          <article
+                            key={message.id}
+                            className={`mr-peer-discussion-message ${message.senderId === user?.id ? 'mr-peer-discussion-message-own' : ''}`}
+                          >
+                            <div>
+                              <strong>{message.senderId === user?.id ? 'You' : message.senderName}</strong>
+                              <time dateTime={message.createdAt}>
+                                {new Date(message.createdAt).toLocaleString()}
+                              </time>
+                            </div>
+                            <p>{message.content}</p>
+                          </article>
+                        ))}
+                      </div>
+                      <form className="mr-peer-discussion-form" onSubmit={handleSendDiscussionMessage}>
+                        <textarea
+                          value={discussionDraft}
+                          maxLength={5000}
+                          onChange={(event) => setDiscussionDraft(event.target.value)}
+                          placeholder="Discuss this evaluation feedback..."
+                          disabled={discussionSending}
+                        />
+                        <button
+                          type="submit"
+                          className="mr-btn mr-btn-primary"
+                          disabled={!discussionDraft.trim() || discussionSending}
+                        >
+                          {discussionSending ? 'Sending...' : 'Send'}
+                        </button>
+                      </form>
+                    </section>
                   ) : null}
                 </section>
               ) : null}

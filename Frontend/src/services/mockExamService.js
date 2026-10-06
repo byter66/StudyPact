@@ -209,6 +209,21 @@ export const savePeerEvaluationDraft = async (sessionId, assignmentId, rubricSco
   return response?.data ?? response;
 };
 
+export const getEvaluationDiscussion = async (sessionId, assignmentId) => {
+  const response = await apiRequest(
+    `/api/mock/sessions/${encodeURIComponent(sessionId)}/peer-evaluations/${encodeURIComponent(assignmentId)}/discussion`,
+  );
+  return response?.data ?? response;
+};
+
+export const postEvaluationDiscussionMessage = async (sessionId, assignmentId, content) => {
+  const response = await apiRequest(
+    `/api/mock/sessions/${encodeURIComponent(sessionId)}/peer-evaluations/${encodeURIComponent(assignmentId)}/discussion`,
+    { method: "POST", body: JSON.stringify({ content }) },
+  );
+  return response?.data ?? response;
+};
+
 export const submitMockAttempt = async (roomId, answers, meta = {}) => {
   const response = await apiRequest(`/api/mock-exams/${encodeURIComponent(roomId || "mock-room")}/submit`, {
     method: "POST",

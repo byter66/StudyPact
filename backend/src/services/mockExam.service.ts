@@ -948,6 +948,7 @@ export const getPeerEvaluationOverview = async (sessionId: string, participantId
       expectedEvaluationCount,
       finalMeanReady: allEvaluatorsComplete,
       evaluations: receivedEvaluationRows.map(({ assignment, score }) => ({
+        assignmentId: assignment.id,
         evaluator: names.get(assignment.evaluator_id) || "StudyPact participant",
         score: Number(score!.score),
         rubricScores: score!.rubric_scores,
@@ -973,6 +974,111 @@ export const getPeerEvaluationOverview = async (sessionId: string, participantId
     })),
     allEvaluationsComplete,
     ownResult,
+  };
+};
+
+const getEvaluationDiscussionContext = async (
+  sessionId: string,
+  assignmentId: string,
+  userId: string,
+) => {
+  const session = await getMockSession(sessionId);
+  if (!session) throw new Error("Mock session not found.");
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .from("evaluator_assignments")
+    .select("id, evaluator_id, submission_id, mock_submissions!inner(participant_id, attempt_id)")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (!assignment) throw new Error("Peer evaluation assignment not found.");
+
+  const submission = Array.isArray(assignment.mock_submissions)
+    ? assignment.mock_submissions[0]
+    : assignment.mock_submissions;
+  const { data: attempt, error: attemptError } = await supabaseAdmin
+    .from("participant_attempts")
+    .select("session_id")
+    .eq("id", submission.attempt_id)
+    .maybeSingle();
+  if (attemptError) throw attemptError;
+  if (!attempt || attempt.session_id !== sessionId) {
+    throw new Error("Peer evaluation assignment does not belong to this session.");
+  }
+  if (assignment.evaluator_id !== userId && submission.participant_id !== userId) {
+    throw new Error("You are not authorized to access this evaluation discussion.");
+  }
+
+  return { assignment };
+};
+
+const getDiscussionParticipantName = async (userId: string) => {
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (error) {
+    console.warn("Unable to resolve evaluation discussion participant name:", error.message);
+    return "StudyPact participant";
+  }
+  const metadata = data.user?.user_metadata ?? {};
+  return metadata.full_name ?? metadata.name ?? "StudyPact participant";
+};
+
+export const getEvaluationDiscussionMessages = async (
+  sessionId: string,
+  assignmentId: string,
+  userId: string,
+) => {
+  await getEvaluationDiscussionContext(sessionId, assignmentId, userId);
+  const { data, error } = await supabaseAdmin
+    .from("evaluation_discussion_messages")
+    .select("id, assignment_id, sender_id, content, created_at")
+    .eq("assignment_id", assignmentId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  const names = new Map<string, string>();
+  await Promise.all((data ?? []).map(async (message) => {
+    names.set(message.sender_id, await getDiscussionParticipantName(message.sender_id));
+  }));
+  return (data ?? []).map((message) => ({
+    id: message.id,
+    assignmentId: message.assignment_id,
+    senderId: message.sender_id,
+    senderName: names.get(message.sender_id) || "StudyPact participant",
+    content: message.content,
+    createdAt: message.created_at,
+  }));
+};
+
+export const createEvaluationDiscussionMessage = async (
+  sessionId: string,
+  assignmentId: string,
+  userId: string,
+  content: string,
+) => {
+  await getEvaluationDiscussionContext(sessionId, assignmentId, userId);
+  const normalizedContent = content.trim();
+  if (normalizedContent.length < 1 || normalizedContent.length > 5000) {
+    throw new Error("Discussion messages must be between 1 and 5000 characters.");
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("evaluation_discussion_messages")
+    .insert({
+      assignment_id: assignmentId,
+      sender_id: userId,
+      content: normalizedContent,
+    })
+    .select("id, assignment_id, sender_id, content, created_at")
+    .single();
+  if (error || !data) throw error ?? new Error("Unable to create the discussion message.");
+
+  return {
+    id: data.id,
+    assignmentId: data.assignment_id,
+    senderId: data.sender_id,
+    senderName: await getDiscussionParticipantName(data.sender_id),
+    content: data.content,
+    createdAt: data.created_at,
   };
 };
 
