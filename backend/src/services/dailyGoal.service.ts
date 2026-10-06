@@ -3,6 +3,7 @@ import { CommitmentPlan, DailyGoal } from "../types/accountability.types";
 import {
   AuthenticatedDailyGoalRequest,
   DailyGoalRow,
+  DailyGoalRequirementError,
   DailyGoalServiceError,
 } from "../types/dailyGoal.types";
 
@@ -19,6 +20,27 @@ const toDailyGoal = (row: DailyGoalRow): DailyGoal =>
   );
 
 const getToday = (): string => new Date().toISOString().slice(0, 10);
+
+export const hasDailyGoalForToday = async (userId: string): Promise<boolean> => {
+  const { data, error } = await supabaseAdmin
+    .from("daily_goals")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("goal_date", getToday())
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+};
+
+export const requireDailyGoalForToday = async (
+  userId: string,
+  message: string
+): Promise<void> => {
+  if (!(await hasDailyGoalForToday(userId))) {
+    throw new DailyGoalRequirementError(message);
+  }
+};
 
 const validateDescription = (description: string): string => {
   const trimmedDescription = description.trim();

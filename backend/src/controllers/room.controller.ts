@@ -14,7 +14,10 @@ import {
 import { CreateRoomInput, JoinRoomResult, Room } from "../types/room.types";
 import { TaskRequirementError } from "../types/userTask.types";
 import { getRoomMemberDailyGoals } from "../services/dailyGoal.service";
-import { DailyGoalServiceError } from "../types/dailyGoal.types";
+import {
+  DailyGoalRequirementError,
+  DailyGoalServiceError,
+} from "../types/dailyGoal.types";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -35,6 +38,17 @@ const handleTaskRequirementError = (
     message: error.message,
   });
   return true;
+};
+
+const handleRoomEligibilityError = (error: unknown, res: Response): boolean => {
+  if (error instanceof DailyGoalRequirementError) {
+    res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+    });
+    return true;
+  }
+  return handleTaskRequirementError(error, res);
 };
 
 export const getRooms = async (_req: Request, res: Response) => {
@@ -115,7 +129,7 @@ export const postRoom = async (req: AuthenticatedRequest, res: Response) => {
       creatorUserId,
     });
   } catch (error) {
-    if (!handleTaskRequirementError(error, res)) {
+    if (!handleRoomEligibilityError(error, res)) {
       throw error;
     }
     return;
@@ -148,7 +162,7 @@ export const joinRoom = async (
   try {
     result = await joinRoomService(id, userId);
   } catch (error) {
-    if (!handleTaskRequirementError(error, res)) {
+    if (!handleRoomEligibilityError(error, res)) {
       throw error;
     }
     return;

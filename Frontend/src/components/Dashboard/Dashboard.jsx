@@ -16,9 +16,6 @@ import {
   getDailyGoalStreak,
   updateDailyGoal,
 } from "../../services/dailyGoalService";
-import {
-  getUserTasks,
-} from "../../services/userTaskService";
 import "./Dashboard.css";
 
 const MOCK_USER = { name: "Ananya", streakGoal: 14 };
@@ -28,8 +25,6 @@ const UUID_PATTERN =
 const EXAM_FILTERS = ["All", "UPSC", "JEE", "NEET", "GATE"];
 
 const EMPTY_TASKS_MESSAGE = "Your goals will appear here. Add a goal to get started.";
-const TASKS_LOAD_ERROR =
-  "Tasks are temporarily unavailable. Please retry; if this continues, check the task database setup.";
 
 const normalizeDailyGoal = (goal) => ({
   ...goal,
@@ -132,9 +127,6 @@ function CreateRoomModal({ onClose, onCreate }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [tasks, setTasks] = useState([]);
-  const [tasksLoading, setTasksLoading] = useState(true);
-  const [tasksError, setTasksError] = useState("");
   const [rooms, setRooms] = useState([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -182,23 +174,9 @@ export default function Dashboard() {
     }
   }, [user?.id]);
 
-  const loadTasks = async () => {
-    setTasksLoading(true);
-    setTasksError("");
-    try {
-      setTasks(await getUserTasks());
-    } catch (error) {
-      setTasksError(TASKS_LOAD_ERROR);
-      console.error("Unable to load user tasks:", error);
-    } finally {
-      setTasksLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadRooms();
-    loadTasks();
-  }, [loadRooms, user?.id]);
+  }, [loadRooms]);
 
   const loadAccountability = useCallback(async () => {
     setDailyGoalLoading(true);
@@ -281,12 +259,6 @@ export default function Dashboard() {
   };
 
   const handleCreateRoom = async ({ name }) => {
-    if (!tasksLoading && !tasksError && tasks.length === 0) {
-      setShowCreateModal(false);
-      setRoomError("Add at least one task on your dashboard before creating a room.");
-      return;
-    }
-
     setRoomError("");
     try {
       const result = await apiRequest("/api/rooms", {
@@ -304,16 +276,15 @@ export default function Dashboard() {
       navigate(`/study-room/${room.id}`);
     } catch (error) {
       console.error("Unable to create room:", error);
-      setRoomError(error.message || "Unable to create this room.");
+      setRoomError(
+        error.message?.includes("daily goal")
+          ? "Add at least one daily goal before joining or creating a room."
+          : error.message || "Unable to create this room.",
+      );
     }
   };
 
   const handleEnterRoom = async (room) => {
-    if (!tasksLoading && !tasksError && tasks.length === 0) {
-      setRoomError("Add at least one task on your dashboard before joining a room.");
-      return false;
-    }
-
     if (!UUID_PATTERN.test(room.id)) {
       setRoomError("This room is not connected to a real backend room yet.");
       return false;
@@ -327,7 +298,11 @@ export default function Dashboard() {
       navigate(`/study-room/${room.id}`);
       return true;
     } catch (error) {
-      setRoomError(error.message || "Unable to join this room.");
+      setRoomError(
+        error.message?.includes("daily goal")
+          ? "Add at least one daily goal before joining or creating a room."
+          : error.message || "Unable to join this room.",
+      );
       return false;
     } finally {
       setJoiningRoomId(null);
@@ -347,7 +322,11 @@ export default function Dashboard() {
       const entered = await handleEnterRoom(room);
       if (entered) setRoomCode("");
     } catch (error) {
-      setRoomError(error.message || "Unable to find this room.");
+      setRoomError(
+        error.message?.includes("daily goal")
+          ? "Add at least one daily goal before joining or creating a room."
+          : error.message || "Unable to find this room.",
+      );
     } finally {
       setJoiningByCode(false);
     }

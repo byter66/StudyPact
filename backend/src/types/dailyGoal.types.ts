@@ -25,3 +25,12 @@ export class DailyGoalServiceError extends Error {
     this.name = "DailyGoalServiceError";
   }
 }
+
+export class DailyGoalRequirementError extends Error {
+  public readonly statusCode = 403;
+
+  public constructor(message: string) {
+    super(message);
+    this.name = "DailyGoalRequirementError";
+  }
+}
