@@ -38,3 +38,10 @@ export const getDailyGoalLeaderboard = async () => {
   const result = await apiRequest("/api/daily-goals/leaderboard");
   return result.data;
 };
+
+export const getRoomMemberDailyGoals = async (roomId) => {
+  const result = await apiRequest(
+    `/api/rooms/${encodeURIComponent(roomId)}/daily-goals`,
+  );
+  return result.data;
+};

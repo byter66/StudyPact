@@ -11,13 +11,13 @@ import {
     joinRoom,
     leaveRoom,
 } from '../../services/roomService';
-import { getUserTasks, updateUserTask } from '../../services/userTaskService';
 import {
     createMockSessionForRoom,
     getActiveMockRooms,
     getAvailableMockPapers,
     joinMockRoom,
 } from '../../services/mockExamService';
+import { completeDailyGoal, getTodayDailyGoals } from '../../services/dailyGoalService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import './StudyRoom.css';
@@ -51,9 +51,9 @@ const StudyRoom = () => {
     const [realtimeError, setRealtimeError] = useState('');
     const [memberError, setMemberError] = useState('');
     const [leaving, setLeaving] = useState(false);
-    const [tasks, setTasks] = useState([]);
-    const [tasksLoading, setTasksLoading] = useState(true);
-    const [tasksError, setTasksError] = useState('');
+    const [dailyGoals, setDailyGoals] = useState([]);
+    const [dailyGoalsLoading, setDailyGoalsLoading] = useState(true);
+    const [dailyGoalsError, setDailyGoalsError] = useState('');
     const [availablePapers, setAvailablePapers] = useState([]);
     const [activeMockRooms, setActiveMockRooms] = useState([]);
     const [activeMockRoomsLoading, setActiveMockRoomsLoading] = useState(true);
@@ -378,45 +378,41 @@ const StudyRoom = () => {
     }, [messages]);
 
     useEffect(() => {
-        if (!room) return undefined;
-
         let isCurrent = true;
-        setTasksLoading(true);
-        setTasksError('');
+        setDailyGoalsLoading(true);
+        setDailyGoalsError('');
 
-        getUserTasks()
-            .then((userTasks) => {
-                if (isCurrent) setTasks(userTasks);
+        getTodayDailyGoals()
+            .then((goals) => {
+                if (isCurrent) setDailyGoals(Array.isArray(goals) ? goals : []);
             })
             .catch((error) => {
                 if (isCurrent) {
-                    setTasksError('Unable to load your tasks. Please retry from the dashboard.');
-                    console.error('Unable to load user tasks in room:', error);
+                    setDailyGoalsError("Unable to load today's goals.");
+                    console.error('Unable to load daily goals in room:', error);
                 }
             })
             .finally(() => {
-                if (isCurrent) setTasksLoading(false);
+                if (isCurrent) setDailyGoalsLoading(false);
             });
 
         return () => {
             isCurrent = false;
         };
-    }, [room]);
+    }, []);
 
-    const toggleTask = async (task) => {
-        setTasksError('');
+    const toggleDailyGoal = async (goal) => {
+        setDailyGoalsError('');
         try {
-            const updatedTask = await updateUserTask(task.id, {
-                completed: !task.completed,
-            });
-            setTasks((currentTasks) =>
-                currentTasks.map((currentTask) =>
-                    currentTask.id === task.id ? updatedTask : currentTask
+            const updatedGoal = await completeDailyGoal(goal.id);
+            setDailyGoals((currentGoals) =>
+                currentGoals.map((currentGoal) =>
+                    currentGoal.id === goal.id ? updatedGoal : currentGoal
                 ),
             );
         } catch (error) {
-            setTasksError('Unable to update this task. Please try again.');
-            console.error('Unable to update user task in room:', error);
+            setDailyGoalsError("Unable to update today's goal. Please try again.");
+            console.error('Unable to complete daily goal in room:', error);
         }
     };
 
@@ -708,7 +704,7 @@ const StudyRoom = () => {
         }
     };
 
-    const completedTasks = tasks.filter((task) => task.completed).length;
+    const completedGoals = dailyGoals.filter((goal) => goal.isCompleted).length;
     const progressPercent = (FOCUS_MINUTES * 60 - secondsLeft) / (FOCUS_MINUTES * 60) * 100;
 
     if (roomLoading) {
@@ -874,25 +870,26 @@ const StudyRoom = () => {
 
                     <div className="sr-goal-strip">
                         <span className="sr-goal-strip-label">
-                            My tasks — {completedTasks}/{tasks.length} complete
+                            My tasks — {completedGoals}/{dailyGoals.length} complete
                         </span>
-                        {tasksError && <p className="sr-task-error" role="alert">{tasksError}</p>}
+                        {dailyGoalsError && <p className="sr-task-error" role="alert">{dailyGoalsError}</p>}
                         <div className="sr-goal-strip-items">
-                            {tasksLoading ? (
-                                <span className="sr-goal-chip">Loading tasks...</span>
-                            ) : tasks.length === 0 ? (
-                                <span className="sr-goal-chip">No tasks yet</span>
-                            ) : tasks.map((task) => (
+                            {dailyGoalsLoading ? (
+                                <span className="sr-goal-chip">Loading goals...</span>
+                            ) : dailyGoals.length === 0 ? (
+                                <span className="sr-goal-chip">No daily goals set for today.</span>
+                            ) : dailyGoals.map((goal) => (
                                 <label
-                                    key={task.id}
-                                    className={`sr-goal-chip sr-goal-task ${task.completed ? 'sr-goal-done' : ''}`}
+                                    key={goal.id}
+                                    className={`sr-goal-chip sr-goal-task ${goal.isCompleted ? 'sr-goal-done' : ''}`}
                                 >
                                     <input
                                         type="checkbox"
-                                        checked={task.completed}
-                                        onChange={() => toggleTask(task)}
+                                        checked={goal.isCompleted}
+                                        onChange={() => toggleDailyGoal(goal)}
+                                        disabled={goal.isCompleted}
                                     />
-                                    {task.title}
+                                    {goal.description}
                                 </label>
                             ))}
                         </div>

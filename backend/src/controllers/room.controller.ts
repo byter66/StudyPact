@@ -13,6 +13,8 @@ import {
 } from "../services/room.service";
 import { CreateRoomInput, JoinRoomResult, Room } from "../types/room.types";
 import { TaskRequirementError } from "../types/userTask.types";
+import { getRoomMemberDailyGoals } from "../services/dailyGoal.service";
+import { DailyGoalServiceError } from "../types/dailyGoal.types";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -192,6 +194,37 @@ export const getMembers = async (
 
   const members = await listRoomMembers(roomId);
   res.status(200).json({ success: true, data: members });
+};
+
+export const getRoomDailyGoals = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  const roomId = req.params.roomId;
+  const userId = req.user?.id;
+
+  if (typeof roomId !== "string" || !UUID_PATTERN.test(roomId)) {
+    res.status(400).json({ success: false, message: "Invalid room ID" });
+    return;
+  }
+  if (!userId) {
+    res.status(401).json({ success: false, message: "Authentication required." });
+    return;
+  }
+
+  try {
+    const goals = await getRoomMemberDailyGoals(roomId, userId);
+    res.status(200).json({ success: true, data: goals });
+  } catch (error) {
+    if (error instanceof DailyGoalServiceError) {
+      res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+      return;
+    }
+    throw error;
+  }
 };
 
 export const getRoomLeaderboard = async (

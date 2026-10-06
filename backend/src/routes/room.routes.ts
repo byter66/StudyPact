@@ -4,6 +4,7 @@ import {
   getRoomByJoinCode,
   getMembers,
   getRoomLeaderboard,
+  getRoomDailyGoals,
   getRooms,
   leaveRoom,
   joinRoom,
@@ -16,6 +17,7 @@ const router = Router();
 router.get("/", getRooms);
 router.get("/code/:code", getRoomByJoinCode);
 router.get("/:roomId/leaderboard", requireAuth, getRoomLeaderboard);
+router.get("/:roomId/daily-goals", requireAuth, getRoomDailyGoals);
 router.get("/:id", getRoom);
 router.post("/", requireAuth, postRoom);
 router.post("/:id/join", requireAuth, joinRoom);
