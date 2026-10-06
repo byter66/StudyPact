@@ -6,6 +6,7 @@ import {
   createOrUpdateSubmission,
   getMockPaperById,
   getMockPapers,
+  getMockSessionTiming,
   getOrCreateAttempt,
   getSessionWithPaper,
   getSubmissionById,
@@ -119,7 +120,10 @@ export const startMockSessionHandler = async (req: AuthenticatedRequest, res: Re
     }
 
     const session = await startMockSession(sessionId, userId, durationSeconds);
-    return res.status(200).json({ success: true, data: { session } });
+    return res.status(200).json({
+      success: true,
+      data: { session, ...getMockSessionTiming(session) },
+    });
   } catch (error: any) {
     const message = error?.message || "Unable to start the mock exam.";
     const status = message.includes("not found") ? 404
@@ -281,13 +285,25 @@ export const submitMockPdf = async (req: AuthenticatedRequest, res: Response) =>
     });
   } catch (error: any) {
     const message = error?.message || "Unable to upload the answer script.";
-    const statusCode = message.includes("Only PDF") || message.includes("too large") || message.includes("empty") || message.includes("expired")
+    const statusCode = message.includes("Only PDF")
+      || message.includes("valid PDF")
+      || message.includes("too large")
+      || message.includes("empty")
+      || message.includes("file size")
       ? 400
-      : message.includes("not found") || message.includes("does not belong") || message.includes("current session")
-        ? 403
-        : 500;
+      : message.includes("submission window") || message.includes("already been submitted")
+        ? 409
+        : message.includes("not found") || message.includes("does not belong")
+          ? 403
+          : 500;
+    if (statusCode === 500) {
+      console.error("Unable to upload the answer script:", error);
+    }
 
-    return res.status(statusCode).json({ success: false, message });
+    return res.status(statusCode).json({
+      success: false,
+      message: statusCode === 500 ? "Unable to upload the answer script. Please try again." : message,
+    });
   }
 };
 

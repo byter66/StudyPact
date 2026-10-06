@@ -70,6 +70,14 @@ export interface MockSubmissionRecord {
 
 const MOCK_SUBMISSIONS_BUCKET = "mock-submissions";
 const MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024;
+export const MOCK_SUBMISSION_WINDOW_SECONDS = 5 * 60;
+
+export const getMockSessionTiming = (session: MockSession, now = new Date()) => ({
+  serverNow: now.toISOString(),
+  submissionDeadlineAt: session.endsAt
+    ? new Date(new Date(session.endsAt).getTime() + MOCK_SUBMISSION_WINDOW_SECONDS * 1000).toISOString()
+    : null,
+});
 
 export const mockSubmissionLimits = {
   maxPdfSizeBytes: MAX_PDF_SIZE_BYTES,
@@ -705,6 +713,7 @@ export const getSessionWithPaper = async (sessionId: string, participantId: stri
     paper,
     attempt,
     submission: existingSubmission,
+    ...getMockSessionTiming(session),
   };
 };
 
@@ -1003,17 +1012,13 @@ export const createOrUpdateSubmission = async ({
   participantId,
   sessionId,
   filePath,
-  fileName,
   fileType,
-  fileSize,
 }: {
   attemptId: string;
   participantId: string;
   sessionId: string;
   filePath: string;
-  fileName?: string | null;
   fileType?: string | null;
-  fileSize?: number | null;
 }): Promise<MockSubmissionRecord> => {
   const { data: attempt, error: attemptError } = await supabaseAdmin
     .from("participant_attempts")
@@ -1053,8 +1058,6 @@ export const createOrUpdateSubmission = async ({
         file_type: fileType ?? existing.file_type ?? "application/pdf",
         status: "SUBMITTED",
         submitted_at: submittedAt,
-        file_name: fileName ?? existing.file_name ?? null,
-        file_size: fileSize ?? existing.file_size ?? null,
       })
       .eq("id", existing.id)
       .select()
@@ -1074,8 +1077,6 @@ export const createOrUpdateSubmission = async ({
       participant_id: participantId,
       file_path: filePath,
       file_type: fileType ?? "application/pdf",
-      file_size: fileSize ?? null,
-      file_name: fileName ?? null,
       status: "SUBMITTED",
       submitted_at: submittedAt,
     })
@@ -1106,11 +1107,17 @@ export const uploadAndStoreMockSubmission = async ({
   fileType: string;
   fileSize: number;
 }): Promise<MockSubmissionRecord> => {
-  validatePdfSubmission({ name: fileName, type: fileType, size: fileSize });
+  validatePdfSubmission({ name: fileName, type: fileType, size: fileBuffer.length });
+  if (Number(fileSize) !== fileBuffer.length) {
+    throw new Error("The uploaded file size could not be verified.");
+  }
+  if (!fileBuffer.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+    throw new Error("The selected file is not a valid PDF.");
+  }
 
   const { data: attempt, error: attemptError } = await supabaseAdmin
     .from("participant_attempts")
-    .select("id, session_id, participant_id, status")
+    .select("id, session_id, participant_id, status, submitted_at")
     .eq("id", attemptId)
     .eq("participant_id", participantId)
     .maybeSingle();
@@ -1121,6 +1128,9 @@ export const uploadAndStoreMockSubmission = async ({
 
   if (attempt.session_id !== sessionId) {
     throw new Error("This attempt does not belong to the current session.");
+  }
+  if (attempt.status === "submitted" || attempt.submitted_at) {
+    throw new Error("An answer script has already been submitted for this attempt.");
   }
 
   const { data: session, error: sessionError } = await supabaseAdmin
@@ -1133,9 +1143,32 @@ export const uploadAndStoreMockSubmission = async ({
     throw new Error("The mock session could not be verified.");
   }
 
-  const endsAt = session.ends_at ? new Date(session.ends_at).getTime() : null;
-  if (endsAt !== null && Date.now() > endsAt) {
-    throw new Error("The mock session has expired. Submissions are no longer accepted.");
+  const endsAt = session.ends_at ? new Date(session.ends_at).getTime() : NaN;
+  if (session.status === "draft" || !Number.isFinite(endsAt)) {
+    throw new Error("The submission window is not open yet.");
+  }
+  const submissionDeadline = endsAt + MOCK_SUBMISSION_WINDOW_SECONDS * 1000;
+  const now = Date.now();
+  if (now < endsAt) {
+    throw new Error("The submission window opens when the exam ends.");
+  }
+  if (now >= submissionDeadline) {
+    throw new Error("The submission window is closed.");
+  }
+
+  const { data: existingSubmission, error: existingSubmissionError } = await supabaseAdmin
+    .from("mock_submissions")
+    .select("id, status")
+    .eq("attempt_id", attemptId)
+    .eq("participant_id", participantId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingSubmissionError) {
+    throw existingSubmissionError;
+  }
+  if (existingSubmission?.status === "SUBMITTED") {
+    throw new Error("An answer script has already been submitted for this attempt.");
   }
 
   const storagePath = `${MOCK_SUBMISSIONS_BUCKET}/${sessionId}/${participantId}/${crypto.randomUUID()}.pdf`;
@@ -1152,13 +1185,32 @@ export const uploadAndStoreMockSubmission = async ({
     throw new Error(uploadError.message || "The PDF could not be uploaded.");
   }
 
-  return createOrUpdateSubmission({
+  if (Date.now() >= submissionDeadline) {
+    const { error: cleanupError } = await supabaseAdmin.storage
+      .from(MOCK_SUBMISSIONS_BUCKET)
+      .remove([storagePath]);
+    if (cleanupError) {
+      console.error("Unable to remove an answer PDF uploaded after its submission deadline:", cleanupError);
+    }
+    throw new Error("The submission window is closed.");
+  }
+
+  const record = await createOrUpdateSubmission({
     attemptId,
     participantId,
     sessionId,
     filePath: storagePath,
-    fileName,
     fileType,
-    fileSize,
   });
+
+  const { error: attemptUpdateError } = await supabaseAdmin
+    .from("participant_attempts")
+    .update({ status: "submitted", submitted_at: record.submittedAt })
+    .eq("id", attemptId)
+    .eq("participant_id", participantId);
+  if (attemptUpdateError) {
+    throw attemptUpdateError;
+  }
+
+  return record;
 };

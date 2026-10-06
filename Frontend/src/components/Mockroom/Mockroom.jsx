@@ -9,6 +9,7 @@ import {
 import './Mockroom.css';
 
 const MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024;
+const SUBMISSION_WINDOW_SECONDS = 5 * 60;
 
 const formatTime = (seconds) => {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -33,7 +34,6 @@ const MockRoom = () => {
   const [paper, setPaper] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState('');
   const [submission, setSubmission] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -43,6 +43,7 @@ const MockRoom = () => {
   const [isStartingExam, setIsStartingExam] = useState(false);
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
+  const serverTimeOffsetRef = useRef(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -71,28 +72,45 @@ const MockRoom = () => {
 
         if (!isMounted) return;
 
-        setSessionData({ ...session, attempt: payload.attempt ?? null });
         setPaper(nextPaper);
         setSubmission(nextSubmission);
 
+        const serverNow = payload?.serverNow ? Date.parse(payload.serverNow) : Date.now();
+        serverTimeOffsetRef.current = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
+        const currentServerTime = Date.now() + serverTimeOffsetRef.current;
         const sessionEndsAt = session?.endsAt || payload?.endsAt || null;
-        const now = Date.now();
-        const secondsLeft = sessionEndsAt ? Math.max(0, Math.ceil((new Date(sessionEndsAt).getTime() - now) / 1000)) : 0;
+        const endsAtMs = sessionEndsAt ? Date.parse(sessionEndsAt) : NaN;
+        const submissionDeadlineAt = payload?.submissionDeadlineAt
+          || (Number.isFinite(endsAtMs)
+            ? new Date(endsAtMs + SUBMISSION_WINDOW_SECONDS * 1000).toISOString()
+            : null);
+        const submissionDeadlineMs = submissionDeadlineAt ? Date.parse(submissionDeadlineAt) : NaN;
+        const secondsLeft = Number.isFinite(endsAtMs)
+          ? Math.max(0, Math.ceil((endsAtMs - currentServerTime) / 1000))
+          : 0;
+        const submissionSecondsLeft = Number.isFinite(submissionDeadlineMs)
+          ? Math.max(0, Math.ceil((submissionDeadlineMs - currentServerTime) / 1000))
+          : 0;
         setTimeRemaining(secondsLeft);
         setExamDurationMinutes(session?.durationSeconds
           ? String(Math.ceil(session.durationSeconds / 60))
           : '');
+        const sessionView = {
+          ...session,
+          attempt: payload.attempt ?? null,
+          submissionDeadlineAt,
+        };
+        setSessionData(sessionView);
 
-        if (session?.status === 'expired' || session?.status === 'completed') {
-          setPhase('expired');
-        } else if (session?.status === 'draft') {
+        if (session?.status === 'draft') {
           setPhase('draft');
-        } else if (session?.status === 'live' && secondsLeft <= 0) {
-          setPhase('expired');
+        } else if (Number.isFinite(endsAtMs) && currentServerTime >= endsAtMs) {
+          setTimeRemaining(submissionSecondsLeft);
+          setPhase(submissionSecondsLeft > 0 ? 'submission-window' : 'closed');
         } else if (session?.status === 'live') {
           setPhase('live');
         } else {
-          throw new Error('The mock session has an unsupported state.');
+          setPhase('closed');
         }
       } catch (loadError) {
         if (isMounted) {
@@ -112,16 +130,39 @@ const MockRoom = () => {
   }, [sessionId]);
 
   useEffect(() => {
-    if (!sessionData || phase !== 'live') return undefined;
+    if (!sessionData || (phase !== 'live' && phase !== 'submission-window')) return undefined;
 
     const updateTimer = () => {
       const endsAt = sessionData?.endsAt || sessionData?.session?.endsAt || null;
-      if (!endsAt) return;
+      if (!endsAt || !Number.isFinite(Date.parse(endsAt))) {
+        setTimeRemaining(0);
+        setPhase('closed');
+        return;
+      }
 
-      const remaining = Math.max(0, Math.ceil((new Date(endsAt).getTime() - Date.now()) / 1000));
-      setTimeRemaining(remaining);
-      if (remaining <= 0) {
-        setPhase('expired');
+      const serverNow = Date.now() + serverTimeOffsetRef.current;
+      const endsAtMs = Date.parse(endsAt);
+      if (phase === 'live') {
+        const remaining = Math.max(0, Math.ceil((endsAtMs - serverNow) / 1000));
+        setTimeRemaining(remaining);
+        if (remaining <= 0) {
+          const deadlineAt = sessionData.submissionDeadlineAt
+            || new Date(endsAtMs + SUBMISSION_WINDOW_SECONDS * 1000).toISOString();
+          const submissionRemaining = Math.max(
+            0,
+            Math.ceil((Date.parse(deadlineAt) - serverNow) / 1000),
+          );
+          setTimeRemaining(submissionRemaining);
+          setPhase(submissionRemaining > 0 ? 'submission-window' : 'closed');
+        }
+      } else {
+        const deadlineAt = sessionData.submissionDeadlineAt
+          || new Date(endsAtMs + SUBMISSION_WINDOW_SECONDS * 1000).toISOString();
+        const remaining = Math.max(0, Math.ceil((Date.parse(deadlineAt) - serverNow) / 1000));
+        setTimeRemaining(remaining);
+        if (remaining <= 0) {
+          setPhase('closed');
+        }
       }
     };
 
@@ -146,8 +187,14 @@ const MockRoom = () => {
         throw new Error('The server did not return the started mock session.');
       }
 
-      setSessionData((current) => ({ ...current, ...startedSession }));
-      setTimeRemaining(Math.max(0, Math.ceil((new Date(startedSession.endsAt).getTime() - Date.now()) / 1000)));
+      const serverNow = response?.serverNow ? Date.parse(response.serverNow) : Date.now();
+      serverTimeOffsetRef.current = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
+      const submissionDeadlineAt = response?.submissionDeadlineAt
+        || new Date(Date.parse(startedSession.endsAt) + SUBMISSION_WINDOW_SECONDS * 1000).toISOString();
+      setSessionData((current) => ({ ...current, ...startedSession, submissionDeadlineAt }));
+      setTimeRemaining(Math.max(0, Math.ceil((
+        Date.parse(startedSession.endsAt) - Date.now() - serverTimeOffsetRef.current
+      ) / 1000)));
       setPhase('live');
     } catch (startError) {
       setError(startError?.message || 'Unable to start the mock exam.');
@@ -187,7 +234,6 @@ const MockRoom = () => {
 
     setError('');
     setIsSubmitting(true);
-    setStatusMessage('Uploading...');
 
     try {
       const response = await submitAnswerScript({
@@ -198,21 +244,20 @@ const MockRoom = () => {
 
       if (response?.status === 'SUBMITTED' || response?.data?.status === 'SUBMITTED' || response?.id) {
         setSubmission(response?.data || response || null);
-        setPhase('submitted');
-        setStatusMessage('✓ Answer script submitted');
       } else {
         throw new Error(response?.message || 'Upload failed.');
       }
     } catch (submitError) {
       setError(submitError?.message || 'Upload failed. Please try again.');
-      setStatusMessage('');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const totalDuration = sessionData?.durationSeconds || 1800;
-  const showUploadPanel = phase === 'expired' || phase === 'submitted';
+  const showUploadPanel = phase === 'submission-window' || phase === 'closed';
+  const submissionComplete = submission?.status?.toUpperCase() === 'SUBMITTED';
+  const canSubmit = phase === 'submission-window' && !submissionComplete;
 
   if (sessionLoading) {
     return (
@@ -242,7 +287,7 @@ const MockRoom = () => {
           </h1>
         </div>
         <Link to={sessionData?.roomId ? `/study-room/${sessionData.roomId}` : '/dashboard'} className="mr-link-btn">
-          Back to room
+          {showUploadPanel ? 'Leave Mock Room' : 'Back to room'}
         </Link>
       </header>
 
@@ -257,40 +302,61 @@ const MockRoom = () => {
 
           {showUploadPanel ? (
             <div className="mr-upload-panel">
-              <p className="mr-upload-title">Answer submission</p>
-              <p className="mr-upload-text">Upload your completed answer script as a PDF.</p>
+              <h2 className="mr-upload-title">ANSWER SCRIPT SUBMISSION</h2>
+              {phase === 'submission-window' ? (
+                <>
+                  <div className="mr-submission-countdown" role="timer" aria-live="off">
+                    <span>Submission window:</span>
+                    <strong>{formatTime(timeRemaining)}</strong>
+                  </div>
+                  {!submissionComplete ? (
+                    <>
+                      <p className="mr-upload-text">Upload your completed answer script.</p>
 
-              <label className="mr-upload-input-label">
-                <input ref={fileInputRef} type="file" accept="application/pdf" onChange={handleFileChange} />
-                <span>[ Choose PDF ]</span>
-              </label>
+                      <label className={`mr-upload-input-label ${isSubmitting ? 'mr-upload-input-disabled' : ''}`}>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          onChange={handleFileChange}
+                          disabled={!canSubmit || isSubmitting}
+                        />
+                        <span>[ Choose PDF ]</span>
+                      </label>
 
-              {selectedFile ? (
-                <div className="mr-file-info">
-                  <p>Selected: {selectedFile.name}</p>
-                  <p>{formatFileSize(selectedFile.size)}</p>
-                </div>
+                      {selectedFile ? (
+                        <div className="mr-file-info">
+                          <p>Selected: {selectedFile.name}</p>
+                          <p>{formatFileSize(selectedFile.size)}</p>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </>
               ) : null}
 
               {error ? <div className="mr-error-box" role="alert">{error}</div> : null}
-
-              {statusMessage ? <div className="mr-success-box">{statusMessage}</div> : null}
-
-              {submission ? (
-                <div className="mr-submission-box">
-                  <p>Submission ID: {submission.id || submission.data?.id}</p>
-                  <p>Status: {submission.status || submission.data?.status || 'SUBMITTED'}</p>
+              {submissionComplete ? (
+                <div className="mr-success-box" role="status">Answer script submitted.</div>
+              ) : null}
+              {phase === 'closed' ? (
+                <div className="mr-error-box" role="status">Submission window closed.</div>
+              ) : null}
+              {canSubmit && !submissionComplete ? (
+                <button
+                  type="button"
+                  className="mr-btn mr-btn-primary"
+                  onClick={handleSubmitPdf}
+                  disabled={!selectedFile || isSubmitting}
+                >
+                  {isSubmitting ? 'Uploading...' : 'Submit Answer Script'}
+                </button>
+              ) : null}
+              {phase === 'closed' && !submissionComplete ? (
+                <div className="mr-submission-closed-note">
+                  Return to the StudyRoom when you are ready.
                 </div>
               ) : null}
-
-              <button
-                type="button"
-                className="mr-btn mr-btn-primary"
-                onClick={handleSubmitPdf}
-                disabled={!selectedFile || isSubmitting}
-              >
-                {isSubmitting ? 'Uploading...' : 'Submit Answer Script'}
-              </button>
             </div>
           ) : paper?.documentUrl ? (
             <iframe
