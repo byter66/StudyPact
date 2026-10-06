@@ -3,13 +3,17 @@ import { requireAuth } from "../middleware/auth.middleware";
 import {
   createMockSessionHandler,
   getMockExam,
+  getPeerEvaluationAssignmentHandler,
+  getPeerEvaluationOverviewHandler,
   getMockSessionDetails,
   getMockSubmission,
   joinMockSessionHandler,
   listRoomMockSessions,
   listMockPapers,
+  savePeerEvaluationDraftHandler,
   startMockSessionHandler,
   submitMockExam,
+  submitPeerEvaluationHandler,
   submitMockPdf,
 } from "../controllers/mockExam.controller";
 
@@ -20,6 +24,10 @@ router.post("/sessions", requireAuth, createMockSessionHandler);
 router.get("/rooms/:roomId/sessions", requireAuth, listRoomMockSessions);
 router.post("/rooms/:roomId/sessions/:sessionId/join", requireAuth, joinMockSessionHandler);
 router.post("/sessions/:sessionId/start", requireAuth, startMockSessionHandler);
+router.get("/sessions/:sessionId/peer-evaluations", requireAuth, getPeerEvaluationOverviewHandler);
+router.get("/sessions/:sessionId/peer-evaluations/:assignmentId", requireAuth, getPeerEvaluationAssignmentHandler);
+router.put("/sessions/:sessionId/peer-evaluations/:assignmentId/draft", requireAuth, savePeerEvaluationDraftHandler);
+router.post("/sessions/:sessionId/peer-evaluations/:assignmentId", requireAuth, submitPeerEvaluationHandler);
 router.get("/sessions/:sessionId", requireAuth, getMockSessionDetails);
 router.get("/", getMockExam);
 router.get("/:roomId", getMockExam);

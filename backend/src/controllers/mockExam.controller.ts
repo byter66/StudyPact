@@ -6,13 +6,17 @@ import {
   createOrUpdateSubmission,
   getMockPaperById,
   getMockPapers,
+  getPeerEvaluationAssignment,
+  getPeerEvaluationOverview,
   getMockSessionTiming,
   getOrCreateAttempt,
   getSessionWithPaper,
   getSubmissionById,
   joinMockSession,
   listJoinableMockSessions,
+  savePeerEvaluationDraft,
   startMockSession,
+  submitPeerEvaluation,
   uploadAndStoreMockSubmission,
 } from "../services/mockExam.service";
 
@@ -159,6 +163,170 @@ export const getMockSessionDetails = async (req: AuthenticatedRequest, res: Resp
     const message = error?.message || "Unable to load the mock session.";
     const status = message.includes("no longer joinable") ? 409 : 500;
     return res.status(status).json({ success: false, message });
+  }
+};
+
+export const getPeerEvaluationOverviewHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+    const rawSessionId = req.params.sessionId;
+    const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: "sessionId is required." });
+    }
+
+    const overview = await getPeerEvaluationOverview(sessionId, userId);
+    return res.status(200).json({ success: true, data: overview });
+  } catch (error: any) {
+    const message = error?.message || "Unable to load peer evaluations.";
+    const status = message.includes("must be a member") || message.includes("must join") ? 403
+      : message.includes("not found") ? 404
+        : 500;
+    if (status === 500) console.error("Unable to load peer evaluations:", error);
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? "Unable to load peer evaluations. Please try again." : message,
+    });
+  }
+};
+
+export const getPeerEvaluationAssignmentHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+    const rawSessionId = req.params.sessionId;
+    const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+    const rawAssignmentId = req.params.assignmentId;
+    const assignmentId = Array.isArray(rawAssignmentId) ? rawAssignmentId[0] : rawAssignmentId;
+    if (!sessionId || !assignmentId) {
+      return res.status(400).json({ success: false, message: "sessionId and assignmentId are required." });
+    }
+
+    const assignment = await getPeerEvaluationAssignment(sessionId, assignmentId, userId);
+    return res.status(200).json({ success: true, data: assignment });
+  } catch (error: any) {
+    const message = error?.message || "Unable to load this peer evaluation.";
+    const status = message.includes("cannot evaluate") ? 403
+      : message.includes("not found") ? 404
+        : message.includes("already been completed") || message.includes("opens after") ? 409
+          : message.includes("rubric") ? 422
+            : 500;
+    if (status === 500) console.error("Unable to load peer evaluation assignment:", error);
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? "Unable to load this peer evaluation. Please try again." : message,
+    });
+  }
+};
+
+export const submitPeerEvaluationHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+    const rawSessionId = req.params.sessionId;
+    const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+    const rawAssignmentId = req.params.assignmentId;
+    const assignmentId = Array.isArray(rawAssignmentId) ? rawAssignmentId[0] : rawAssignmentId;
+    if (!sessionId || !assignmentId) {
+      return res.status(400).json({ success: false, message: "sessionId and assignmentId are required." });
+    }
+
+    const { rubricScores: inputScores, comments: inputComments } = req.body as {
+      rubricScores?: unknown;
+      comments?: unknown;
+    };
+    const isValidRubricScore = (item: unknown): item is { questionId: string; score: number } => {
+      if (!item || typeof item !== "object") return false;
+      const candidate = item as { questionId?: unknown; score?: unknown };
+      return typeof candidate.questionId === "string" && typeof candidate.score === "number";
+    };
+    const rubricScores = Array.isArray(inputScores) ? inputScores : null;
+    const comments = typeof inputComments === "string" ? inputComments : null;
+    if (
+      !rubricScores
+      || !rubricScores.every(isValidRubricScore)
+      || comments === null
+    ) {
+      return res.status(400).json({ success: false, message: "Rubric scores and comments are required." });
+    }
+
+    const score = await submitPeerEvaluation(
+      sessionId,
+      assignmentId,
+      userId,
+      rubricScores,
+      comments,
+    );
+    return res.status(200).json({ success: true, data: score });
+  } catch (error: any) {
+    const message = error?.message || "Unable to submit this evaluation.";
+    const status = message.includes("cannot evaluate") ? 403
+      : message.includes("not found") ? 404
+        : message.includes("already been completed") || message.includes("already been submitted")
+          || message.includes("opens after") || message.includes("no longer available") ? 409
+          : message.includes("score") || message.includes("rubric") || message.includes("comments")
+            || message.includes("Open this assigned") ? 400
+            : 500;
+    if (status === 500) console.error("Unable to submit peer evaluation:", error);
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? "Unable to submit this evaluation. Please try again." : message,
+    });
+  }
+};
+
+export const savePeerEvaluationDraftHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+    const rawSessionId = req.params.sessionId;
+    const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+    const rawAssignmentId = req.params.assignmentId;
+    const assignmentId = Array.isArray(rawAssignmentId) ? rawAssignmentId[0] : rawAssignmentId;
+    if (!sessionId || !assignmentId) {
+      return res.status(400).json({ success: false, message: "sessionId and assignmentId are required." });
+    }
+
+    const { rubricScores: inputScores, comments: inputComments } = req.body as {
+      rubricScores?: unknown;
+      comments?: unknown;
+    };
+    const isValidRubricScore = (item: unknown): item is { questionId: string; score: number } => {
+      if (!item || typeof item !== "object") return false;
+      const candidate = item as { questionId?: unknown; score?: unknown };
+      return typeof candidate.questionId === "string" && typeof candidate.score === "number";
+    };
+    const rubricScores = Array.isArray(inputScores) ? inputScores : null;
+    const comments = typeof inputComments === "string" ? inputComments : null;
+    if (!rubricScores || !rubricScores.every(isValidRubricScore) || comments === null) {
+      return res.status(400).json({ success: false, message: "Rubric scores and comments are required." });
+    }
+
+    await savePeerEvaluationDraft(sessionId, assignmentId, userId, rubricScores, comments);
+    return res.status(200).json({ success: true, data: { saved: true } });
+  } catch (error: any) {
+    const message = error?.message || "Unable to save this evaluation draft.";
+    const status = message.includes("cannot evaluate") ? 403
+      : message.includes("not found") ? 404
+        : message.includes("already been completed") || message.includes("opens after")
+          || message.includes("no longer available") ? 409
+          : message.includes("score") || message.includes("rubric") || message.includes("comments")
+            || message.includes("Open this assigned") ? 400
+            : 500;
+    if (status === 500) console.error("Unable to save peer evaluation draft:", error);
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? "Unable to save this evaluation draft. Please try again." : message,
+    });
   }
 };
 

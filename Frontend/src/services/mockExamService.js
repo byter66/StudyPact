@@ -173,6 +173,42 @@ export const submitAnswerScript = async ({ attemptId, sessionId, file }) => {
   return response.data ?? response;
 };
 
+export const getPeerEvaluations = async (sessionId) => {
+  const response = await apiRequest(
+    `/api/mock/sessions/${encodeURIComponent(sessionId)}/peer-evaluations`,
+  );
+  return response?.data ?? response;
+};
+
+export const getPeerEvaluation = async (sessionId, assignmentId) => {
+  const response = await apiRequest(
+    `/api/mock/sessions/${encodeURIComponent(sessionId)}/peer-evaluations/${encodeURIComponent(assignmentId)}`,
+  );
+  return response?.data ?? response;
+};
+
+export const submitPeerEvaluation = async (sessionId, assignmentId, rubricScores, comments) => {
+  const response = await apiRequest(
+    `/api/mock/sessions/${encodeURIComponent(sessionId)}/peer-evaluations/${encodeURIComponent(assignmentId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ rubricScores, comments }),
+    },
+  );
+  return response?.data ?? response;
+};
+
+export const savePeerEvaluationDraft = async (sessionId, assignmentId, rubricScores, comments) => {
+  const response = await apiRequest(
+    `/api/mock/sessions/${encodeURIComponent(sessionId)}/peer-evaluations/${encodeURIComponent(assignmentId)}/draft`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ rubricScores, comments }),
+    },
+  );
+  return response?.data ?? response;
+};
+
 export const submitMockAttempt = async (roomId, answers, meta = {}) => {
   const response = await apiRequest(`/api/mock-exams/${encodeURIComponent(roomId || "mock-room")}/submit`, {
     method: "POST",

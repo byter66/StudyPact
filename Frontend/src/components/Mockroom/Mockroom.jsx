@@ -2,8 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
+  getPeerEvaluation,
+  getPeerEvaluations,
   getMockSession,
+  savePeerEvaluationDraft,
   startMockSession,
+  submitPeerEvaluation,
   submitAnswerScript,
 } from '../../services/mockExamService';
 import './Mockroom.css';
@@ -35,6 +39,13 @@ const MockRoom = () => {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [peerEvaluation, setPeerEvaluation] = useState(null);
+  const [peerEvaluationLoading, setPeerEvaluationLoading] = useState(false);
+  const [peerEvaluationError, setPeerEvaluationError] = useState('');
+  const [activePeerAssignment, setActivePeerAssignment] = useState(null);
+  const [evaluationScores, setEvaluationScores] = useState({});
+  const [evaluationComments, setEvaluationComments] = useState('');
+  const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
   const [submission, setSubmission] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -44,6 +55,8 @@ const MockRoom = () => {
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
   const serverTimeOffsetRef = useRef(0);
+  const draftSaveTimerRef = useRef(null);
+  const draftSaveQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
     let isMounted = true;
@@ -171,6 +184,68 @@ const MockRoom = () => {
     return () => window.clearInterval(timerRef.current);
   }, [sessionData, phase]);
 
+  useEffect(() => {
+    if (!sessionId || !sessionData || phase !== 'closed') return undefined;
+
+    let isCurrent = true;
+    setPeerEvaluationLoading(true);
+    setPeerEvaluationError('');
+    getPeerEvaluations(sessionId)
+      .then((overview) => {
+        if (isCurrent) setPeerEvaluation(overview);
+      })
+      .catch((loadError) => {
+        if (!isCurrent) return;
+        console.error('Unable to load peer evaluations:', loadError);
+        setPeerEvaluationError(loadError?.message || 'Unable to load peer evaluations.');
+      })
+      .finally(() => {
+        if (isCurrent) setPeerEvaluationLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [sessionId, sessionData, phase]);
+
+  useEffect(() => {
+    if (!activePeerAssignment || isSubmittingEvaluation) return undefined;
+    if (draftSaveTimerRef.current) {
+      window.clearTimeout(draftSaveTimerRef.current);
+    }
+
+    const rubricScores = Object.entries(evaluationScores)
+      .filter(([, value]) => value !== '' && Number.isFinite(Number(value)))
+      .map(([questionId, value]) => ({ questionId, score: Number(value) }));
+    const { assignmentId } = activePeerAssignment;
+    const comments = evaluationComments;
+    draftSaveTimerRef.current = window.setTimeout(() => {
+      draftSaveQueueRef.current = draftSaveQueueRef.current
+        .catch(() => {})
+        .then(async () => {
+          await savePeerEvaluationDraft(sessionId, assignmentId, rubricScores, comments);
+          setPeerEvaluationError('');
+        });
+      draftSaveQueueRef.current.catch((saveError) => {
+        console.error('Unable to save peer evaluation draft:', saveError);
+        setPeerEvaluationError(saveError?.message || 'Unable to save evaluation progress.');
+      });
+    }, 500);
+
+    return () => {
+      if (draftSaveTimerRef.current) {
+        window.clearTimeout(draftSaveTimerRef.current);
+        draftSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    activePeerAssignment,
+    evaluationScores,
+    evaluationComments,
+    isSubmittingEvaluation,
+    sessionId,
+  ]);
+
   const handleStartExam = async () => {
     const durationMinutes = Number(examDurationMinutes);
     if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
@@ -251,6 +326,67 @@ const MockRoom = () => {
       setError(submitError?.message || 'Upload failed. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenPeerAssignment = async (assignment) => {
+    setPeerEvaluationError('');
+    try {
+      const evaluation = await getPeerEvaluation(sessionId, assignment.id);
+      setActivePeerAssignment(evaluation);
+      const savedScores = Object.fromEntries(
+        evaluation.questions.map((question) => [question.id, '']),
+      );
+      evaluation.rubricScores.forEach((score) => {
+        if (Object.hasOwn(savedScores, score.questionId)) {
+          savedScores[score.questionId] = String(score.score);
+        }
+      });
+      setEvaluationScores(savedScores);
+      setEvaluationComments(evaluation.comments || '');
+    } catch (loadError) {
+      console.error('Unable to open peer evaluation:', loadError);
+      setPeerEvaluationError(loadError?.message || 'Unable to open this peer evaluation.');
+    }
+  };
+
+  const handleSubmitPeerEvaluation = async (event) => {
+    event.preventDefault();
+    if (!activePeerAssignment || isSubmittingEvaluation) return;
+    setPeerEvaluationError('');
+    setIsSubmittingEvaluation(true);
+    try {
+      if (draftSaveTimerRef.current) {
+        window.clearTimeout(draftSaveTimerRef.current);
+        draftSaveTimerRef.current = null;
+      }
+      await draftSaveQueueRef.current.catch(() => {});
+      const rubricScores = activePeerAssignment.questions.map((question) => ({
+        questionId: question.id,
+        score: Number(evaluationScores[question.id]),
+      }));
+      await savePeerEvaluationDraft(
+        sessionId,
+        activePeerAssignment.assignmentId,
+        rubricScores,
+        evaluationComments,
+      );
+      await submitPeerEvaluation(
+        sessionId,
+        activePeerAssignment.assignmentId,
+        rubricScores,
+        evaluationComments,
+      );
+      setActivePeerAssignment(null);
+      setPeerEvaluationLoading(true);
+      const overview = await getPeerEvaluations(sessionId);
+      setPeerEvaluation(overview);
+    } catch (submitError) {
+      console.error('Unable to submit peer evaluation:', submitError);
+      setPeerEvaluationError(submitError?.message || 'Unable to submit this evaluation.');
+    } finally {
+      setIsSubmittingEvaluation(false);
+      setPeerEvaluationLoading(false);
     }
   };
 
@@ -356,6 +492,132 @@ const MockRoom = () => {
                 <div className="mr-submission-closed-note">
                   Return to the StudyRoom when you are ready.
                 </div>
+              ) : null}
+              {phase === 'closed' ? (
+                <section className="mr-peer-evaluation" aria-labelledby="mr-peer-evaluation-title">
+                  <h2 id="mr-peer-evaluation-title">PEER EVALUATION</h2>
+                  {peerEvaluationLoading ? <p>Loading peer evaluations...</p> : null}
+                  {peerEvaluationError ? <p className="mr-peer-error" role="alert">{peerEvaluationError}</p> : null}
+                  {!peerEvaluationLoading && peerEvaluation && !peerEvaluation.available ? (
+                    <p>Peer evaluation will be available after the submission stage is complete.</p>
+                  ) : null}
+                  {!peerEvaluationLoading && peerEvaluation?.available ? (
+                    <>
+                      {peerEvaluation.assignments.length ? (
+                        <>
+                          <p className="mr-peer-progress">
+                            Assigned submissions: {peerEvaluation.assignments.filter((item) => item.completed).length}/{peerEvaluation.assignments.length} complete
+                          </p>
+                          <ol className="mr-peer-assignment-list">
+                            {peerEvaluation.assignments.map((assignment) => (
+                              <li key={assignment.id}>
+                                <span>{assignment.participantName}</span>
+                                {assignment.completed ? (
+                                  <span className="mr-peer-complete">Completed</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="mr-btn mr-btn-secondary"
+                                    onClick={() => handleOpenPeerAssignment(assignment)}
+                                  >
+                                    {assignment.status === 'in_progress' ? 'Continue' : 'Evaluate'}
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+                        </>
+                      ) : (
+                        <p>No peer submissions are available for evaluation.</p>
+                      )}
+                      {!peerEvaluation.allEvaluationsComplete ? (
+                        <p className="mr-peer-locked">
+                          Complete all assigned peer evaluations to unlock your result.
+                        </p>
+                      ) : null}
+                      {peerEvaluation.ownResult ? (
+                        <div className="mr-peer-result">
+                          <h3>Your evaluated answer script</h3>
+                          <a href={peerEvaluation.ownResult.downloadUrl} target="_blank" rel="noreferrer">
+                            View your answer script
+                          </a>
+                          {peerEvaluation.ownResult.finalMeanReady ? (
+                            <p>Final mean score: {peerEvaluation.ownResult.finalScore}</p>
+                          ) : (
+                            <p>
+                              Peer evaluations received: {peerEvaluation.ownResult.receivedEvaluationCount}/
+                              {peerEvaluation.ownResult.expectedEvaluationCount}
+                            </p>
+                          )}
+                          <ul>
+                            {peerEvaluation.ownResult.evaluations.map((evaluation, index) => (
+                              <li key={`${evaluation.submittedAt}-${index}`}>
+                                <strong>{evaluation.evaluator}:</strong> {evaluation.score} marks
+                                {evaluation.comments ? <p>{evaluation.comments}</p> : null}
+                                {Array.isArray(evaluation.rubricScores) && evaluation.rubricScores.length ? (
+                                  <ul>
+                                    {evaluation.rubricScores.map((rubricScore) => (
+                                      <li key={rubricScore.questionId}>
+                                        Question score: {rubricScore.score}/{rubricScore.maxMarks}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {activePeerAssignment ? (
+                    <form className="mr-peer-evaluation-form" onSubmit={handleSubmitPeerEvaluation}>
+                      <h3>Evaluate {activePeerAssignment.participantName}'s answer script</h3>
+                      <a href={activePeerAssignment.answerScriptUrl} target="_blank" rel="noreferrer">
+                        View / download answer script
+                      </a>
+                      {activePeerAssignment.questions.map((question, index) => (
+                        <label className="mr-peer-score-row" key={question.id}>
+                          <span>
+                            Question {index + 1}: {question.subject} (max {question.maxMarks})
+                            {question.rubric.length
+                              ? ` — ${question.rubric.map((criterion) => `${criterion.criterion} (${criterion.marks})`).join(', ')}`
+                              : ''}
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            max={question.maxMarks}
+                            step="0.01"
+                            value={evaluationScores[question.id] ?? ''}
+                            onChange={(event) => setEvaluationScores((current) => ({
+                              ...current,
+                              [question.id]: event.target.value,
+                            }))}
+                            required
+                            disabled={isSubmittingEvaluation}
+                          />
+                        </label>
+                      ))}
+                      <label className="mr-peer-comments">
+                        Comments
+                        <textarea
+                          value={evaluationComments}
+                          maxLength={5000}
+                          onChange={(event) => setEvaluationComments(event.target.value)}
+                          disabled={isSubmittingEvaluation}
+                        />
+                      </label>
+                      <button
+                        type="submit"
+                        className="mr-btn mr-btn-primary"
+                        disabled={isSubmittingEvaluation}
+                      >
+                        {isSubmittingEvaluation ? 'Submitting...' : 'Submit Evaluation'}
+                      </button>
+                    </form>
+                  ) : null}
+                </section>
               ) : null}
             </div>
           ) : paper?.documentUrl ? (

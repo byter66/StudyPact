@@ -345,6 +345,149 @@
     font-size: 13px;
 }
 
+.mr-peer-evaluation {
+    width: 100%;
+    margin-top: 10px;
+    padding-top: 18px;
+    border-top: 1px solid #ece6d8;
+}
+
+.mr-peer-evaluation h2 {
+    margin: 0 0 12px;
+    color: #29251f;
+    font-size: 16px;
+}
+
+.mr-peer-evaluation h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.mr-peer-evaluation p,
+.mr-peer-result li {
+    color: #6b6558;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.mr-peer-error {
+    color: #923c2f !important;
+}
+
+.mr-peer-progress,
+.mr-peer-locked {
+    margin: 10px 0;
+}
+
+.mr-peer-assignment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 0;
+    padding: 0;
+    list-style: none;
+}
+
+.mr-peer-assignment-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 11px;
+    border: 1px solid #ece6d8;
+    border-radius: 9px;
+    color: #34302a;
+    font-size: 13px;
+}
+
+.mr-peer-assignment-list .mr-btn {
+    padding: 7px 14px;
+    font-size: 12px;
+}
+
+.mr-peer-complete {
+    color: #285d39;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.mr-peer-locked {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f7f2e9;
+}
+
+.mr-peer-result,
+.mr-peer-evaluation-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid #ece6d8;
+    border-radius: 10px;
+    background: #fffdf8;
+}
+
+.mr-peer-result ul {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.mr-peer-result li p {
+    margin: 3px 0;
+}
+
+.mr-peer-evaluation-form > a,
+.mr-peer-result > a {
+    color: #a8511f;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.mr-peer-score-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 9px 0;
+    border-bottom: 1px solid #f0eadf;
+    color: #6b6558;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.mr-peer-score-row input {
+    width: 95px;
+    min-height: 38px;
+    flex: 0 0 auto;
+    padding: 7px 9px;
+    border: 1px solid #e4ddce;
+    border-radius: 8px;
+    font: inherit;
+}
+
+.mr-peer-comments {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #6b6558;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.mr-peer-comments textarea {
+    min-height: 90px;
+    padding: 10px;
+    border: 1px solid #e4ddce;
+    border-radius: 8px;
+    font: inherit;
+    resize: vertical;
+}
+
 .mr-success-box {
     border: 1px solid #cfe7d5;
     background: #eef8f1;

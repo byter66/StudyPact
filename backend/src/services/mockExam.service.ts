@@ -79,6 +79,14 @@ export const getMockSessionTiming = (session: MockSession, now = new Date()) => 
     : null,
 });
 
+const getEvaluationQuestionMaximum = (question: MockExamQuestion) => {
+  if (!question.rubric?.length) {
+    return Number(question.maxMarks);
+  }
+  const rubricMaximum = question.rubric.reduce((sum, criterion) => sum + Number(criterion.marks), 0);
+  return Math.max(0, Math.min(Number(question.maxMarks), rubricMaximum));
+};
+
 export const mockSubmissionLimits = {
   maxPdfSizeBytes: MAX_PDF_SIZE_BYTES,
 };
@@ -714,6 +722,615 @@ export const getSessionWithPaper = async (sessionId: string, participantId: stri
     attempt,
     submission: existingSubmission,
     ...getMockSessionTiming(session),
+  };
+};
+
+const getPeerEvaluationContext = async (sessionId: string, participantId: string) => {
+  const session = await getMockSession(sessionId);
+  if (!session) {
+    throw new Error("Mock session not found.");
+  }
+
+  const { data: membership, error: membershipError } = await supabaseAdmin
+    .from("room_members")
+    .select("room_id")
+    .eq("room_id", session.roomId)
+    .eq("user_id", participantId)
+    .maybeSingle();
+  if (membershipError) throw membershipError;
+  if (!membership) throw new Error("You must be a member of this Study Room.");
+
+  const { data: attempt, error: attemptError } = await supabaseAdmin
+    .from("participant_attempts")
+    .select("id, session_id, participant_id")
+    .eq("session_id", sessionId)
+    .eq("participant_id", participantId)
+    .maybeSingle();
+  if (attemptError) throw attemptError;
+  if (!attempt) throw new Error("You must join the mock session before peer evaluation.");
+
+  const { submissionDeadlineAt } = getMockSessionTiming(session);
+  if (!submissionDeadlineAt) {
+    throw new Error("The mock session has no exam deadline.");
+  }
+
+  return { session, attempt, submissionDeadlineAt };
+};
+
+const ensurePeerAssignments = async (sessionId: string) => {
+  const session = await getMockSession(sessionId);
+  const { submissionDeadlineAt } = session ? getMockSessionTiming(session) : { submissionDeadlineAt: null };
+  if (!session || !submissionDeadlineAt || Date.now() < Date.parse(submissionDeadlineAt)) {
+    return false;
+  }
+
+  const { data: sessionAttempts, error: attemptError } = await supabaseAdmin
+    .from("participant_attempts")
+    .select("id, participant_id")
+    .eq("session_id", sessionId);
+  if (attemptError) throw attemptError;
+  if (!sessionAttempts?.length) {
+    return true;
+  }
+
+  const { data: submissions, error: submissionsError } = await supabaseAdmin
+    .from("mock_submissions")
+    .select("id, participant_id, submitted_at")
+    .in("status", ["SUBMITTED", "UNDER_EVALUATION", "EVALUATED"])
+    .in("attempt_id", sessionAttempts.map((attempt) => attempt.id))
+    .order("submitted_at", { ascending: true });
+
+  if (submissionsError) throw submissionsError;
+  const eligibleSubmissions = [...(submissions ?? [])]
+    .sort((left, right) => left.participant_id.localeCompare(right.participant_id));
+  if (!eligibleSubmissions.length) {
+    return true;
+  }
+
+  const participantIds = [...new Set(sessionAttempts.map((attempt) => attempt.participant_id))].sort();
+  const evaluatorsPerSubmission = Math.min(3, Math.max(0, participantIds.length - 1));
+  const assignments = eligibleSubmissions.flatMap((submission, submissionIndex) => {
+    const eligibleEvaluators = participantIds.filter((id) => id !== submission.participant_id);
+    if (!eligibleEvaluators.length) return [];
+    const rotation = submissionIndex % eligibleEvaluators.length;
+    const rotatedEvaluators = [
+      ...eligibleEvaluators.slice(rotation),
+      ...eligibleEvaluators.slice(0, rotation),
+    ];
+    return rotatedEvaluators.slice(0, evaluatorsPerSubmission).map((evaluatorId) => ({
+      submission_id: submission.id,
+      evaluator_id: evaluatorId,
+      status: "assigned",
+    }));
+  });
+  if (!assignments.length) {
+    return true;
+  }
+  const { error: assignmentError } = await supabaseAdmin
+    .from("evaluator_assignments")
+    .upsert(assignments, {
+      onConflict: "submission_id,evaluator_id",
+      ignoreDuplicates: true,
+    });
+  if (assignmentError) throw assignmentError;
+
+  const assignedSubmissionIds = [...new Set(assignments.map((assignment) => assignment.submission_id))];
+  const { error: submissionStatusError } = await supabaseAdmin
+    .from("mock_submissions")
+    .update({ status: "UNDER_EVALUATION" })
+    .in("id", assignedSubmissionIds)
+    .eq("status", "SUBMITTED");
+  if (submissionStatusError) throw submissionStatusError;
+
+  return true;
+};
+
+const signedSubmissionUrl = async (filePath: string) => {
+  const { data, error } = await supabaseAdmin.storage
+    .from(MOCK_SUBMISSIONS_BUCKET)
+    .createSignedUrl(filePath, 60 * 60);
+  if (error) throw error;
+  return data.signedUrl;
+};
+
+const getParticipantNames = async (participantIds: string[]) => {
+  const uniqueIds = [...new Set(participantIds)];
+  const names = await Promise.all(uniqueIds.map(async (id) => {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(id);
+    if (error) {
+      console.warn("Unable to resolve peer evaluation participant name:", error.message);
+      return [id, "StudyPact participant"] as const;
+    }
+    const metadata = data.user?.user_metadata ?? {};
+    return [id, metadata.full_name ?? metadata.name ?? "StudyPact participant"] as const;
+  }));
+  return new Map(names);
+};
+
+export const getPeerEvaluationOverview = async (sessionId: string, participantId: string) => {
+  const { session, attempt, submissionDeadlineAt } = await getPeerEvaluationContext(sessionId, participantId);
+  const available = await ensurePeerAssignments(sessionId);
+  const { data: assignments, error: assignmentError } = await supabaseAdmin
+    .from("evaluator_assignments")
+    .select("id, submission_id, evaluator_id, assigned_at, status")
+    .eq("evaluator_id", participantId)
+    .order("assigned_at", { ascending: true });
+  if (assignmentError) throw assignmentError;
+
+  const attemptIdsResult = await supabaseAdmin
+    .from("participant_attempts")
+    .select("id")
+    .eq("session_id", sessionId);
+  if (attemptIdsResult.error) throw attemptIdsResult.error;
+  const sessionAttemptIds = (attemptIdsResult.data ?? []).map((row) => row.id);
+
+  const sessionSubmissionsResult = sessionAttemptIds.length
+    ? await supabaseAdmin
+        .from("mock_submissions")
+        .select("id, attempt_id, participant_id, file_path, status, submitted_at")
+        .in("attempt_id", sessionAttemptIds)
+        .in("status", ["SUBMITTED", "UNDER_EVALUATION", "EVALUATED"])
+    : { data: [], error: null };
+  if (sessionSubmissionsResult.error) throw sessionSubmissionsResult.error;
+  const submissions = sessionSubmissionsResult.data ?? [];
+  const submissionById = new Map(submissions.map((submission) => [submission.id, submission]));
+  const ownSubmission = submissions.find((submission) => submission.attempt_id === attempt.id) ?? null;
+  const assignedRows = (assignments ?? []).filter((assignment) => submissionById.has(assignment.submission_id));
+  const assignmentIds = assignedRows.map((assignment) => assignment.id);
+  const ownEvaluationScoresResult = ownSubmission
+    ? await supabaseAdmin
+        .from("evaluator_assignments")
+        .select("id, evaluator_id, status")
+        .eq("submission_id", ownSubmission.id)
+    : { data: [], error: null };
+  if (ownEvaluationScoresResult.error) throw ownEvaluationScoresResult.error;
+
+  const scoreIds = [...new Set([
+    ...assignmentIds,
+    ...(ownEvaluationScoresResult.data ?? []).map((assignment) => assignment.id),
+  ])];
+  const scoresResult = scoreIds.length
+    ? await supabaseAdmin
+        .from("evaluator_scores")
+        .select("id, assignment_id, score, rubric_scores, comments, submitted_at")
+        .in("assignment_id", scoreIds)
+    : { data: [], error: null };
+  if (scoresResult.error) throw scoresResult.error;
+  const scoreByAssignment = new Map((scoresResult.data ?? []).map((score) => [score.assignment_id, score]));
+  const names = await getParticipantNames([
+    ...assignedRows.map((assignment) => submissionById.get(assignment.submission_id)!.participant_id),
+    ...(ownEvaluationScoresResult.data ?? []).map((assignment) => assignment.evaluator_id),
+  ]);
+  const allEvaluationsComplete = assignedRows.length > 0 && assignedRows.every((assignment) =>
+    assignment.status === "completed" && scoreByAssignment.has(assignment.id)
+  );
+
+  let ownResult = null;
+  const receivedEvaluationRows = (ownEvaluationScoresResult.data ?? [])
+    .map((assignment) => ({ assignment, score: scoreByAssignment.get(assignment.id) }))
+    .filter((item) => item.assignment.status === "completed" && item.score);
+  if (allEvaluationsComplete && ownSubmission) {
+    const expectedEvaluationCount = (ownEvaluationScoresResult.data ?? []).length;
+    const allEvaluatorsComplete = expectedEvaluationCount > 0
+      && receivedEvaluationRows.length === ownEvaluationScoresResult.data!.length;
+    const finalScore = receivedEvaluationRows.length
+      ? Number((
+          receivedEvaluationRows.reduce((sum, item) => sum + Number(item.score!.score), 0)
+          / receivedEvaluationRows.length
+        ).toFixed(2))
+      : null;
+
+    if (finalScore !== null) {
+      const { error: resultError } = await supabaseAdmin
+        .from("mock_results")
+        .upsert({
+          attempt_id: attempt.id,
+          final_score: finalScore,
+          evaluation_status: allEvaluatorsComplete ? "finalized" : "pending",
+          finalized_at: allEvaluatorsComplete ? new Date().toISOString() : null,
+        }, { onConflict: "attempt_id" });
+      if (resultError) throw resultError;
+    }
+
+    if (allEvaluatorsComplete) {
+      const { error: submissionUpdateError } = await supabaseAdmin
+        .from("mock_submissions")
+        .update({ status: "EVALUATED" })
+        .eq("id", ownSubmission.id)
+        .eq("status", "UNDER_EVALUATION");
+      if (submissionUpdateError) throw submissionUpdateError;
+    }
+
+    ownResult = {
+      downloadUrl: await signedSubmissionUrl(ownSubmission.file_path),
+      finalScore: allEvaluatorsComplete ? finalScore : null,
+      receivedEvaluationCount: receivedEvaluationRows.length,
+      expectedEvaluationCount,
+      finalMeanReady: allEvaluatorsComplete,
+      evaluations: receivedEvaluationRows.map(({ assignment, score }) => ({
+        evaluator: names.get(assignment.evaluator_id) || "StudyPact participant",
+        score: Number(score!.score),
+        rubricScores: score!.rubric_scores,
+        comments: score!.comments,
+        submittedAt: score!.submitted_at,
+      })),
+    };
+  }
+
+  return {
+    available,
+    serverNow: new Date().toISOString(),
+    submissionDeadlineAt,
+    assignments: await Promise.all(assignedRows.map(async (assignment) => {
+      const submission = submissionById.get(assignment.submission_id)!;
+      return {
+        id: assignment.id,
+        participantName: names.get(submission.participant_id) || "StudyPact participant",
+        status: assignment.status,
+        completed: assignment.status === "completed" && scoreByAssignment.has(assignment.id),
+        score: scoreByAssignment.has(assignment.id) ? Number(scoreByAssignment.get(assignment.id)!.score) : null,
+      };
+    })),
+    allEvaluationsComplete,
+    ownResult,
+  };
+};
+
+export const getPeerEvaluationAssignment = async (
+  sessionId: string,
+  assignmentId: string,
+  evaluatorId: string
+) => {
+  const { session } = await getPeerEvaluationContext(sessionId, evaluatorId);
+  const available = await ensurePeerAssignments(sessionId);
+  if (!available) throw new Error("Peer evaluation opens after the submission window closes.");
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .from("evaluator_assignments")
+    .select("id, submission_id, evaluator_id, status")
+    .eq("id", assignmentId)
+    .eq("evaluator_id", evaluatorId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (!assignment) throw new Error("Assigned evaluation not found.");
+  if (assignment.status === "completed") throw new Error("This evaluation has already been completed.");
+
+  const { data: submission, error: submissionError } = await supabaseAdmin
+    .from("mock_submissions")
+    .select("id, attempt_id, participant_id, file_path")
+    .eq("id", assignment.submission_id)
+    .maybeSingle();
+  if (submissionError) throw submissionError;
+  if (!submission || submission.participant_id === evaluatorId) {
+    throw new Error("You cannot evaluate your own answer script.");
+  }
+
+  const { data: targetAttempt, error: attemptError } = await supabaseAdmin
+    .from("participant_attempts")
+    .select("session_id")
+    .eq("id", submission.attempt_id)
+    .maybeSingle();
+  if (attemptError) throw attemptError;
+  if (!targetAttempt || targetAttempt.session_id !== sessionId) {
+    throw new Error("Assigned submission does not belong to this session.");
+  }
+
+  const paper = await getMockPaperById(session.paperId);
+  if (!paper) throw new Error("The evaluation rubric could not be loaded.");
+  const questions = paper.questions.map((question) => ({
+    id: question.id,
+    subject: question.subject,
+    question: question.question,
+    maxMarks: getEvaluationQuestionMaximum(question),
+    rubric: question.rubric ?? [],
+  }));
+  if (!questions.length || questions.some((question) => !Number.isFinite(question.maxMarks) || question.maxMarks < 0)) {
+    throw new Error("This paper does not have a usable evaluation rubric.");
+  }
+
+  if (assignment.status === "assigned") {
+    const { data: claimed, error: claimError } = await supabaseAdmin
+      .from("evaluator_assignments")
+      .update({ status: "in_progress" })
+      .eq("id", assignmentId)
+      .eq("evaluator_id", evaluatorId)
+      .eq("status", "assigned")
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) {
+      const { data: current, error: currentError } = await supabaseAdmin
+        .from("evaluator_assignments")
+        .select("status")
+        .eq("id", assignmentId)
+        .eq("evaluator_id", evaluatorId)
+        .maybeSingle();
+      if (currentError) throw currentError;
+      if (current?.status !== "in_progress") {
+        throw new Error("This evaluation is no longer available.");
+      }
+    }
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(submission.participant_id);
+  if (userError) console.warn("Unable to resolve evaluated participant name:", userError.message);
+  const metadata = userData?.user?.user_metadata ?? {};
+  const { data: signedUrl, error: signedUrlError } = await supabaseAdmin.storage
+    .from(MOCK_SUBMISSIONS_BUCKET)
+    .createSignedUrl(submission.file_path, 60 * 60);
+  if (signedUrlError) throw signedUrlError;
+  const { data: draftScore, error: draftScoreError } = await supabaseAdmin
+    .from("evaluator_scores")
+    .select("rubric_scores, comments")
+    .eq("assignment_id", assignmentId)
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (draftScoreError) throw draftScoreError;
+
+  return {
+    assignmentId,
+    participantName: metadata.full_name ?? metadata.name ?? "StudyPact participant",
+    answerScriptUrl: signedUrl.signedUrl,
+    questions,
+    rubricScores: draftScore?.rubric_scores ?? [],
+    comments: draftScore?.comments ?? "",
+  };
+};
+
+export const savePeerEvaluationDraft = async (
+  sessionId: string,
+  assignmentId: string,
+  evaluatorId: string,
+  rubricScores: Array<{ questionId: string; score: number }>,
+  comments: string
+) => {
+  const { session } = await getPeerEvaluationContext(sessionId, evaluatorId);
+  const available = await ensurePeerAssignments(sessionId);
+  if (!available) throw new Error("Peer evaluation opens after the submission window closes.");
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .from("evaluator_assignments")
+    .select("id, submission_id, evaluator_id, status")
+    .eq("id", assignmentId)
+    .eq("evaluator_id", evaluatorId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (!assignment) throw new Error("Assigned evaluation not found.");
+  if (assignment.status === "completed") throw new Error("This evaluation has already been completed.");
+  if (assignment.status !== "in_progress") throw new Error("Open this assigned evaluation before saving.");
+
+  const { data: targetSubmission, error: submissionError } = await supabaseAdmin
+    .from("mock_submissions")
+    .select("participant_id, attempt_id")
+    .eq("id", assignment.submission_id)
+    .maybeSingle();
+  if (submissionError) throw submissionError;
+  if (!targetSubmission || targetSubmission.participant_id === evaluatorId) {
+    throw new Error("You cannot evaluate your own answer script.");
+  }
+
+  const { data: targetAttempt, error: targetAttemptError } = await supabaseAdmin
+    .from("participant_attempts")
+    .select("session_id")
+    .eq("id", targetSubmission.attempt_id)
+    .maybeSingle();
+  if (targetAttemptError) throw targetAttemptError;
+  if (!targetAttempt || targetAttempt.session_id !== sessionId) {
+    throw new Error("Assigned submission does not belong to this session.");
+  }
+
+  const paper = await getMockPaperById(session.paperId);
+  if (!paper) throw new Error("The evaluation rubric could not be loaded.");
+  const questions = new Map(paper.questions.map((question) => [question.id, question]));
+  const seenQuestionIds = new Set<string>();
+  let totalScore = 0;
+  const normalizedScores = rubricScores.map(({ questionId, score }) => {
+    const question = questions.get(questionId);
+    if (!question || seenQuestionIds.has(questionId)) {
+      throw new Error("The evaluation contains an invalid rubric question.");
+    }
+    seenQuestionIds.add(questionId);
+    const maxMarks = getEvaluationQuestionMaximum(question);
+    if (
+      !Number.isFinite(score)
+      || score < 0
+      || score > maxMarks
+      || Math.abs(score * 100 - Math.round(score * 100)) > 1e-8
+    ) {
+      throw new Error(`Question scores must be between 0 and ${maxMarks} marks.`);
+    }
+    totalScore += score;
+    return { questionId, score, maxMarks };
+  });
+  const maximumScore = [...questions.values()].reduce(
+    (sum, question) => sum + getEvaluationQuestionMaximum(question),
+    0,
+  );
+  if (totalScore > maximumScore) {
+    throw new Error(`The evaluation score cannot exceed ${maximumScore} marks.`);
+  }
+  if (comments.length > 5000) {
+    throw new Error("Evaluation comments cannot exceed 5000 characters.");
+  }
+
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("evaluator_scores")
+    .select("id")
+    .eq("assignment_id", assignmentId)
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  const query = existing
+    ? supabaseAdmin
+        .from("evaluator_scores")
+        .update({ score: totalScore, rubric_scores: normalizedScores, comments })
+        .eq("id", existing.id)
+    : supabaseAdmin
+        .from("evaluator_scores")
+        .insert({
+          assignment_id: assignmentId,
+          score: totalScore,
+          rubric_scores: normalizedScores,
+          comments,
+        });
+  const { error: saveError } = await query;
+  if (saveError) throw saveError;
+};
+
+export const submitPeerEvaluation = async (
+  sessionId: string,
+  assignmentId: string,
+  evaluatorId: string,
+  rubricScores: Array<{ questionId: string; score: number }>,
+  comments: string
+) => {
+  const { session } = await getPeerEvaluationContext(sessionId, evaluatorId);
+  const available = await ensurePeerAssignments(sessionId);
+  if (!available) throw new Error("Peer evaluation opens after the submission window closes.");
+
+  const { data: assignment, error: assignmentError } = await supabaseAdmin
+    .from("evaluator_assignments")
+    .select("id, submission_id, evaluator_id, status")
+    .eq("id", assignmentId)
+    .eq("evaluator_id", evaluatorId)
+    .maybeSingle();
+  if (assignmentError) throw assignmentError;
+  if (!assignment) throw new Error("Assigned evaluation not found.");
+  if (assignment.status === "completed") throw new Error("This evaluation has already been completed.");
+  if (assignment.status !== "in_progress") throw new Error("Open this assigned evaluation before submitting it.");
+
+  const { data: targetSubmission, error: submissionError } = await supabaseAdmin
+    .from("mock_submissions")
+    .select("participant_id, attempt_id")
+    .eq("id", assignment.submission_id)
+    .maybeSingle();
+  if (submissionError) throw submissionError;
+  if (!targetSubmission || targetSubmission.participant_id === evaluatorId) {
+    throw new Error("You cannot evaluate your own answer script.");
+  }
+
+  const { data: targetAttempt, error: targetAttemptError } = await supabaseAdmin
+    .from("participant_attempts")
+    .select("session_id")
+    .eq("id", targetSubmission.attempt_id)
+    .maybeSingle();
+  if (targetAttemptError) throw targetAttemptError;
+  if (!targetAttempt || targetAttempt.session_id !== sessionId) {
+    throw new Error("Assigned submission does not belong to this session.");
+  }
+
+  const paper = await getMockPaperById(session.paperId);
+  if (!paper) throw new Error("The evaluation rubric could not be loaded.");
+  const questions = new Map(paper.questions.map((question) => [question.id, question]));
+  if (!Array.isArray(rubricScores) || rubricScores.length !== questions.size) {
+    throw new Error("A score is required for every rubric question.");
+  }
+  const seenQuestionIds = new Set<string>();
+  let totalScore = 0;
+  const normalizedScores = rubricScores.map(({ questionId, score }) => {
+    const question = questions.get(questionId);
+    if (!question || seenQuestionIds.has(questionId)) {
+      throw new Error("The evaluation contains an invalid rubric question.");
+    }
+    seenQuestionIds.add(questionId);
+    const maxMarks = getEvaluationQuestionMaximum(question);
+    if (
+      !Number.isFinite(score)
+      || score < 0
+      || score > maxMarks
+      || Math.abs(score * 100 - Math.round(score * 100)) > 1e-8
+    ) {
+      throw new Error(`Question scores must be between 0 and ${maxMarks} marks.`);
+    }
+    totalScore += score;
+    return { questionId, score, maxMarks };
+  });
+  const maximumScore = [...questions.values()].reduce(
+    (sum, question) => sum + getEvaluationQuestionMaximum(question),
+    0,
+  );
+  if (totalScore > maximumScore) {
+    throw new Error(`The evaluation score cannot exceed ${maximumScore} marks.`);
+  }
+  if (comments.length > 5000) {
+    throw new Error("Evaluation comments cannot exceed 5000 characters.");
+  }
+
+  const { data: completedAssignment, error: completeError } = await supabaseAdmin
+    .from("evaluator_assignments")
+    .update({ status: "completed" })
+    .eq("id", assignmentId)
+    .eq("evaluator_id", evaluatorId)
+    .eq("status", "in_progress")
+    .select("id")
+    .maybeSingle();
+  if (completeError) throw completeError;
+  if (!completedAssignment) throw new Error("This evaluation has already been completed.");
+
+  const { data: draftScore, error: draftError } = await supabaseAdmin
+    .from("evaluator_scores")
+    .select("id")
+    .eq("assignment_id", assignmentId)
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let score: {
+    id: string;
+    assignment_id: string;
+    score: number;
+    rubric_scores: unknown;
+    comments: string | null;
+    submitted_at: string;
+  } | null = null;
+  let scoreError = draftError;
+  if (!scoreError && draftScore) {
+    const result = await supabaseAdmin
+      .from("evaluator_scores")
+      .update({
+        score: totalScore,
+        rubric_scores: normalizedScores,
+        comments,
+        submitted_at: new Date().toISOString(),
+      })
+      .eq("id", draftScore.id)
+      .select("id, assignment_id, score, rubric_scores, comments, submitted_at")
+      .single();
+    score = result.data;
+    scoreError = result.error;
+  } else if (!scoreError) {
+    const result = await supabaseAdmin
+      .from("evaluator_scores")
+      .insert({
+        assignment_id: assignmentId,
+        score: totalScore,
+        rubric_scores: normalizedScores,
+        comments,
+      })
+      .select("id, assignment_id, score, rubric_scores, comments, submitted_at")
+      .single();
+    score = result.data;
+    scoreError = result.error;
+  }
+  if (scoreError || !score) {
+    await supabaseAdmin
+      .from("evaluator_assignments")
+      .update({ status: "in_progress" })
+      .eq("id", assignmentId)
+      .eq("evaluator_id", evaluatorId)
+      .eq("status", "completed");
+    throw scoreError ?? new Error("Unable to save the evaluation.");
+  }
+
+  return {
+    id: score.id,
+    assignmentId: score.assignment_id,
+    score: Number(score.score),
+    rubricScores: score.rubric_scores,
+    comments: score.comments,
+    submittedAt: score.submitted_at,
   };
 };
 
