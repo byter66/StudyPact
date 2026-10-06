@@ -1,32 +1,40 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RoomCard from "../RoomCard/RoomCard";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../services/apiClient";
-import { getRoomByCode, getRooms, joinRoom } from "../../services/roomService";
 import {
-  createUserTask,
+  getRoomByCode,
+  getRooms,
+  joinRoom,
+} from "../../services/roomService";
+import {
+  completeDailyGoal,
+  createDailyGoal,
+  getDailyGoalLeaderboard,
+  getTodayDailyGoals,
+  getDailyGoalStreak,
+  updateDailyGoal,
+} from "../../services/dailyGoalService";
+import {
   getUserTasks,
-  updateUserTask,
 } from "../../services/userTaskService";
 import "./Dashboard.css";
 
-const MOCK_USER = { name: "Ananya", streak: 12, streakGoal: 14, rank: 8 };
+const MOCK_USER = { name: "Ananya", streakGoal: 14 };
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const EXAM_FILTERS = ["All", "UPSC", "JEE", "NEET", "GATE"];
 
-const EMPTY_TASKS_MESSAGE = "Your tasks will appear here. Create a task to get started.";
+const EMPTY_TASKS_MESSAGE = "Your goals will appear here. Add a goal to get started.";
 const TASKS_LOAD_ERROR =
   "Tasks are temporarily unavailable. Please retry; if this continues, check the task database setup.";
 
-const MOCK_LEADERBOARD = [
-  { name: "Sana", streak: 21 },
-  { name: "Karan", streak: 18 },
-  { name: "You", streak: 12 },
-  { name: "Divya", streak: 9 },
-];
+const normalizeDailyGoal = (goal) => ({
+  ...goal,
+  isCompleted: goal?.isCompleted ?? goal?.completed ?? false,
+});
 
 function DailyProgressRing({ streak, completed, total }) {
   const size = 52;
@@ -134,23 +142,45 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [newGoalText, setNewGoalText] = useState("");
+  const [editingGoalId, setEditingGoalId] = useState(null);
   const [joiningRoomId, setJoiningRoomId] = useState(null);
   const [roomCode, setRoomCode] = useState("");
   const [joiningByCode, setJoiningByCode] = useState(false);
   const [roomError, setRoomError] = useState("");
+  const [dailyGoals, setDailyGoals] = useState([]);
+  const [dailyGoalLoading, setDailyGoalLoading] = useState(false);
+  const [dailyGoalError, setDailyGoalError] = useState("");
+  const [streak, setStreak] = useState(0);
+  const [streakLoading, setStreakLoading] = useState(false);
+  const [streakError, setStreakError] = useState("");
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState("");
+  const loadRoomsRequestRef = useRef(0);
 
-  const loadRooms = async () => {
+  const loadRooms = useCallback(async () => {
+    const requestId = ++loadRoomsRequestRef.current;
+    const requestUserId = user?.id;
+    const isCurrentRequest = () => (
+      requestId === loadRoomsRequestRef.current
+      && requestUserId === user?.id
+    );
+
     setRoomsLoading(true);
     try {
       const fetchedRooms = await getRooms();
+      if (!isCurrentRequest()) return;
       setRooms(fetchedRooms);
       setRoomError("");
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setRoomError(error.message || "Unable to load rooms.");
     } finally {
-      setRoomsLoading(false);
+      if (isCurrentRequest()) {
+        setRoomsLoading(false);
+      }
     }
-  };
+  }, [user?.id]);
 
   const loadTasks = async () => {
     setTasksLoading(true);
@@ -168,40 +198,85 @@ export default function Dashboard() {
   useEffect(() => {
     loadRooms();
     loadTasks();
+  }, [loadRooms, user?.id]);
+
+  const loadAccountability = useCallback(async () => {
+    setDailyGoalLoading(true);
+    setStreakLoading(true);
+    setLeaderboardLoading(true);
+    setDailyGoalError("");
+    setStreakError("");
+    setLeaderboardError("");
+
+    const [goalResult, streakResult, leaderboardResult] = await Promise.allSettled([
+      getTodayDailyGoals(),
+      getDailyGoalStreak(),
+      getDailyGoalLeaderboard(),
+    ]);
+
+    if (goalResult.status === "fulfilled") {
+      setDailyGoals((goalResult.value ?? []).map(normalizeDailyGoal));
+    } else {
+      setDailyGoalError("Unable to load today’s daily goal.");
+    }
+
+    if (streakResult.status === "fulfilled") {
+      setStreak(streakResult.value?.streak ?? 0);
+    } else {
+      setStreakError("Unable to load your streak.");
+    }
+
+    if (leaderboardResult.status === "fulfilled") {
+      setLeaderboard(leaderboardResult.value ?? []);
+    } else {
+      setLeaderboardError("Unable to load the accountability leaderboard.");
+    }
+
+    setDailyGoalLoading(false);
+    setStreakLoading(false);
+    setLeaderboardLoading(false);
   }, []);
 
-  const toggleTask = async (task) => {
-    setTasksError("");
+  useEffect(() => {
+    void loadAccountability();
+  }, [loadAccountability]);
+
+  const toggleDailyGoal = async (goalId) => {
+    const goal = dailyGoals.find((item) => item.id === goalId);
+    if (!goal) return;
+    setDailyGoalError("");
     try {
-      const updatedTask = await updateUserTask(task.id, {
-        completed: !task.completed,
-      });
-      setTasks((currentTasks) =>
-        currentTasks.map((currentTask) =>
-          currentTask.id === task.id ? updatedTask : currentTask
-        )
-      );
+      const completedGoal = await completeDailyGoal(goal.id);
+      setDailyGoals((currentGoals) => currentGoals.map((item) => (
+        item.id === completedGoal.id ? normalizeDailyGoal(completedGoal) : item
+      )));
+      await loadAccountability();
     } catch (error) {
-      setTasksError("Unable to update this task. Please try again.");
-      console.error("Unable to update user task:", error);
+      setDailyGoalError("Unable to complete today’s goal. Please try again.");
+      console.error("Unable to complete daily goal:", error);
     }
   };
 
-  const addTask = async (event) => {
+  const saveDailyGoal = async (event) => {
     event.preventDefault();
     const title = newGoalText.trim();
 
     if (!title) return;
 
-    setTasksError("");
+    setDailyGoalError("");
     try {
-      const task = await createUserTask(title);
-      setTasks((currentTasks) => [...currentTasks, task]);
+      const savedGoal = editingGoalId
+        ? await updateDailyGoal(editingGoalId, title)
+        : await createDailyGoal(title);
+      setDailyGoals((currentGoals) => editingGoalId
+        ? currentGoals.map((goal) => goal.id === editingGoalId ? normalizeDailyGoal(savedGoal) : goal)
+        : [...currentGoals, normalizeDailyGoal(savedGoal)]);
       setNewGoalText("");
+      setEditingGoalId(null);
       setShowAddGoal(false);
     } catch (error) {
-      setTasksError("Unable to add this task. Please try again.");
-      console.error("Unable to create user task:", error);
+      setDailyGoalError("Unable to save today’s goal. Please try again.");
+      console.error("Unable to save daily goal:", error);
     }
   };
 
@@ -283,10 +358,7 @@ export default function Dashboard() {
       ? rooms
       : rooms.filter((room) => room.examCategory === activeFilter);
 
-  const completedCount = tasks.filter((task) => task.completed).length;
   const displayName = user?.full_name || MOCK_USER.name;
-  const tasksEmpty = tasks.length === 0;
-
   return (
     <div className={`dashboard-shell ${sidebarOpen ? "sidebar-open" : "sidebar-collapsed"}`}>
       <button
@@ -309,7 +381,7 @@ export default function Dashboard() {
           <span className="sidebar-avatar" title={displayName}>
             {displayName.charAt(0).toUpperCase()}
           </span>
-          <span className="sidebar-rank">Rank #{MOCK_USER.rank}</span>
+          <span className="sidebar-rank">Accountability</span>
         </div>
 
         <div className="sidebar-bottom">
@@ -333,10 +405,13 @@ export default function Dashboard() {
             <h1 className="dashboard-greeting">{displayName}</h1>
           </div>
           <DailyProgressRing
-            streak={MOCK_USER.streak}
-            completed={completedCount}
-            total={tasks.length}
+            streak={streakLoading ? 0 : streak}
+            completed={dailyGoals.filter((goal) => goal.isCompleted).length}
+            total={dailyGoals.length}
           />
+          {streakError ? (
+            <p className="dashboard-room-error" role="alert">{streakError}</p>
+          ) : null}
         </header>
 
         <section className="dashboard-rooms-section">
@@ -399,45 +474,55 @@ export default function Dashboard() {
           <div className="dashboard-card">
             <h3>My tasks</h3>
             <p className="dashboard-card-subtext">
-              {completedCount}/{tasks.length} complete
+              {dailyGoals.length
+                ? `${dailyGoals.filter((goal) => goal.isCompleted).length}/${dailyGoals.length} complete`
+                : "No goals set"}
             </p>
-            {tasksError && (
-              <p className="dashboard-room-error" role="alert">{tasksError}</p>
+            {dailyGoalError && (
+              <p className="dashboard-room-error" role="alert">{dailyGoalError}</p>
             )}
-            {tasksLoading ? (
-              <p className="dashboard-card-subtext" role="status">Loading tasks...</p>
-            ) : tasksError ? (
-              <button type="button" className="goal-add-button" onClick={loadTasks}>
-                Retry loading tasks
-              </button>
-            ) : tasksEmpty ? (
+            {dailyGoalLoading ? (
+              <p className="dashboard-card-subtext" role="status">Loading today’s goal...</p>
+            ) : dailyGoals.length === 0 ? (
               <div className="dashboard-goal-empty-state" aria-live="polite">
                 <p>{EMPTY_TASKS_MESSAGE}</p>
               </div>
             ) : (
               <ul className="goal-list">
-                {tasks.map((task) => (
-                  <li key={task.id} className="goal-item">
+                {dailyGoals.map((goal) => (
+                  <li className="goal-item" key={goal.id}>
                     <label>
                       <input
                         type="checkbox"
-                        checked={task.completed}
-                        onChange={() => toggleTask(task)}
+                        checked={goal.isCompleted}
+                        onChange={() => toggleDailyGoal(goal.id)}
+                        disabled={goal.isCompleted}
                       />
-                      <span className={task.completed ? "goal-done" : ""}>{task.title}</span>
+                      <span className={goal.isCompleted ? "goal-done" : ""}>{goal.description}</span>
                     </label>
+                    <button
+                      type="button"
+                      className="goal-add-cancel"
+                      onClick={() => {
+                        setEditingGoalId(goal.id);
+                        setNewGoalText(goal.description);
+                        setShowAddGoal(true);
+                      }}
+                    >
+                      Edit
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
             {showAddGoal ? (
-              <form className="goal-add-form" onSubmit={addTask}>
+              <form className="goal-add-form" onSubmit={saveDailyGoal}>
                 <input
                   type="text"
                   value={newGoalText}
                   onChange={(event) => setNewGoalText(event.target.value)}
-                  placeholder="Enter a task"
-                  aria-label="New task"
+                  placeholder={editingGoalId ? "Update today’s goal" : "Enter today’s goal"}
+                  aria-label="Daily goal"
                   autoFocus
                 />
                 <button type="submit" className="goal-add-submit">Add</button>
@@ -446,6 +531,7 @@ export default function Dashboard() {
                   className="goal-add-cancel"
                   onClick={() => {
                     setNewGoalText("");
+                    setEditingGoalId(null);
                     setShowAddGoal(false);
                   }}
                 >
@@ -458,25 +544,35 @@ export default function Dashboard() {
                 className="goal-add-button"
                 onClick={() => setShowAddGoal(true)}
               >
-                + Add task
+                + Add goal
               </button>
             )}
           </div>
 
           <div className="dashboard-card">
             <h3>Leaderboard</h3>
-            <ul className="leaderboard-list">
-              {MOCK_LEADERBOARD.map((entry, index) => (
-                <li
-                  key={entry.name}
-                  className={`leaderboard-item ${entry.name === "You" ? "leaderboard-you" : ""}`}
-                >
-                  <span className="leaderboard-rank">{index + 1}</span>
-                  <span className="leaderboard-name">{entry.name}</span>
-                  <span className="leaderboard-streak">🔥 {entry.streak} days</span>
-                </li>
-              ))}
-            </ul>
+            {leaderboardLoading ? (
+              <p className="dashboard-card-subtext" role="status">Loading leaderboard...</p>
+            ) : leaderboardError ? (
+              <p className="dashboard-room-error" role="alert">{leaderboardError}</p>
+            ) : leaderboard.length === 0 ? (
+              <p className="dashboard-card-subtext">No completed daily-goal streaks yet.</p>
+            ) : (
+              <ul className="leaderboard-list">
+                {leaderboard.map((entry) => (
+                  <li
+                    key={entry.userId}
+                    className={`leaderboard-item ${entry.userId === user?.id ? "leaderboard-you" : ""}`}
+                  >
+                    <span className="leaderboard-rank">{entry.rank}</span>
+                    <span className="leaderboard-name">
+                      {entry.name}{entry.userId === user?.id ? " (You)" : ""}
+                    </span>
+                    <span className="leaderboard-streak">🔥 {entry.streak} days</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
       </div>

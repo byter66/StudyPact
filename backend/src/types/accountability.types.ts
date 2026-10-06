@@ -9,7 +9,6 @@ export class DailyGoal implements GoalComponent {
   public constructor(
     public readonly id: string,
     public readonly userId: string,
-    public readonly roomId: string,
     public description: string,
     public readonly date: string,
     isCompleted = false
