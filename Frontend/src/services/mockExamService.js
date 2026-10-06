@@ -111,6 +111,19 @@ export const createMockSessionForRoom = async (roomId, paperId, { durationSecond
   return response?.data ?? response;
 };
 
+export const getActiveMockRooms = async (roomId) => {
+  const response = await apiRequest(`/api/mock/rooms/${encodeURIComponent(roomId)}/sessions`);
+  return response?.data ?? [];
+};
+
+export const joinMockRoom = async (roomId, sessionId) => {
+  const response = await apiRequest(
+    `/api/mock/rooms/${encodeURIComponent(roomId)}/sessions/${encodeURIComponent(sessionId)}/join`,
+    { method: "POST" },
+  );
+  return response?.data ?? response;
+};
+
 export const startMockSession = async (sessionId, durationSeconds) => {
   const response = await apiRequest(`/api/mock/sessions/${encodeURIComponent(sessionId)}/start`, {
     method: "POST",

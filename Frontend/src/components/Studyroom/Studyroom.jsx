@@ -7,13 +7,17 @@ import {
 } from '../../services/pomodoroApi';
 import {
     getRoomById,
-    getRoomLeaderboard,
     getRoomMembers,
     joinRoom,
     leaveRoom,
 } from '../../services/roomService';
 import { getUserTasks, updateUserTask } from '../../services/userTaskService';
-import { createMockSessionForRoom, getAvailableMockPapers } from '../../services/mockExamService';
+import {
+    createMockSessionForRoom,
+    getActiveMockRooms,
+    getAvailableMockPapers,
+    joinMockRoom,
+} from '../../services/mockExamService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import './StudyRoom.css';
@@ -44,9 +48,6 @@ const StudyRoom = () => {
     const [roomLoading, setRoomLoading] = useState(true);
     const [roomError, setRoomError] = useState('');
     const [members, setMembers] = useState([]);
-    const [leaderboard, setLeaderboard] = useState([]);
-    const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-    const [leaderboardError, setLeaderboardError] = useState('');
     const [realtimeError, setRealtimeError] = useState('');
     const [memberError, setMemberError] = useState('');
     const [leaving, setLeaving] = useState(false);
@@ -54,6 +55,10 @@ const StudyRoom = () => {
     const [tasksLoading, setTasksLoading] = useState(true);
     const [tasksError, setTasksError] = useState('');
     const [availablePapers, setAvailablePapers] = useState([]);
+    const [activeMockRooms, setActiveMockRooms] = useState([]);
+    const [activeMockRoomsLoading, setActiveMockRoomsLoading] = useState(true);
+    const [activeMockRoomsError, setActiveMockRoomsError] = useState('');
+    const [joiningMockSessionId, setJoiningMockSessionId] = useState('');
     const [paperSelectionLoading, setPaperSelectionLoading] = useState(false);
     const [selectedPaperId, setSelectedPaperId] = useState('');
     const [showPaperSelector, setShowPaperSelector] = useState(false);
@@ -103,6 +108,39 @@ const StudyRoom = () => {
 
         void loadAvailablePapers();
     }, []);
+
+    useEffect(() => {
+        if (!roomId || !userId) return undefined;
+
+        let isCurrent = true;
+        let requestInProgress = false;
+
+        const refreshActiveMockRooms = async () => {
+            if (requestInProgress) return;
+            requestInProgress = true;
+            try {
+                const sessions = await getActiveMockRooms(roomId);
+                if (!isCurrent) return;
+                setActiveMockRooms(Array.isArray(sessions) ? sessions : []);
+                setActiveMockRoomsError('');
+            } catch (error) {
+                if (!isCurrent) return;
+                console.error('Unable to load active mock rooms:', error);
+                setActiveMockRoomsError('Unable to load active mock rooms. Please try again.');
+            } finally {
+                requestInProgress = false;
+                if (isCurrent) setActiveMockRoomsLoading(false);
+            }
+        };
+
+        void refreshActiveMockRooms();
+        const refreshInterval = window.setInterval(refreshActiveMockRooms, 5000);
+
+        return () => {
+            isCurrent = false;
+            window.clearInterval(refreshInterval);
+        };
+    }, [roomId, userId]);
 
     useEffect(() => {
         if (!showPaperSelector) return undefined;
@@ -168,11 +206,8 @@ const StudyRoom = () => {
                 syncPresence();
             } catch (error) {
                 if (isCurrent) {
-                    setMemberError(
-                        error.message
-                            ? `Unable to load room members: ${error.message}`
-                            : 'Unable to load room members.',
-                    );
+                    console.error('Unable to load room members:', error);
+                    setMemberError('Unable to load room members. Please try again.');
                 }
             }
         };
@@ -341,31 +376,6 @@ const StudyRoom = () => {
             behavior: messages.length > 1 ? 'smooth' : 'auto',
         });
     }, [messages]);
-
-    useEffect(() => {
-        if (!room) return undefined;
-
-        let isCurrent = true;
-        setLeaderboardLoading(true);
-        setLeaderboardError('');
-
-        getRoomLeaderboard(roomId)
-            .then((entries) => {
-                if (isCurrent) setLeaderboard(entries);
-            })
-            .catch((error) => {
-                if (isCurrent) {
-                    setLeaderboardError(error.message || 'Unable to load leaderboard.');
-                }
-            })
-            .finally(() => {
-                if (isCurrent) setLeaderboardLoading(false);
-            });
-
-        return () => {
-            isCurrent = false;
-        };
-    }, [room, roomId]);
 
     useEffect(() => {
         if (!room) return undefined;
@@ -624,6 +634,26 @@ const StudyRoom = () => {
         }
     };
 
+    const handleJoinMockRoom = async (mockRoom) => {
+        const sessionId = mockRoom?.session?.id;
+        if (!roomId || !sessionId || joiningMockSessionId) return;
+
+        setJoiningMockSessionId(sessionId);
+        setActiveMockRoomsError('');
+        try {
+            await joinMockRoom(roomId, sessionId);
+            navigate(`/mock-room/${sessionId}`);
+        } catch (error) {
+            console.error('Unable to join mock room:', error);
+            setActiveMockRoomsError(error.message || 'Unable to join this mock room.');
+            if (error.message?.includes('no longer joinable')) {
+                setActiveMockRooms((current) => current.filter((item) => item.session.id !== sessionId));
+            }
+        } finally {
+            setJoiningMockSessionId('');
+        }
+    };
+
     const handleCustomPaperChange = (event) => {
         const file = event.target.files?.[0] ?? null;
         setPaperSelectionError('');
@@ -754,37 +784,38 @@ const StudyRoom = () => {
                             </li>
                         ))}
                     </ul>
-                    <div className="sr-leaderboard">
-                        <p className="sr-panel-label">Leaderboard</p>
-                        {leaderboardLoading && (
-                            <p className="sr-leaderboard-message">Loading leaderboard...</p>
+                    <section className="sr-active-mock-rooms" aria-labelledby="sr-active-mock-rooms-title">
+                        <h2 className="sr-panel-label" id="sr-active-mock-rooms-title">Active Mock Rooms</h2>
+                        {activeMockRoomsError && (
+                            <p className="sr-mock-rooms-error" role="alert">{activeMockRoomsError}</p>
                         )}
-                        {leaderboardError && (
-                            <p className="sr-leaderboard-message" role="alert">
-                                {leaderboardError}
-                            </p>
-                        )}
-                        {!leaderboardLoading && !leaderboardError && (
-                            <ol className="sr-leaderboard-list">
-                                {leaderboard.map((entry, index) => (
-                                    <li
-                                        key={entry.userId}
-                                        className={`sr-leaderboard-item ${
-                                            entry.userId === user?.id ? 'sr-leaderboard-you' : ''
-                                        }`}
-                                    >
-                                        <span className="sr-leaderboard-rank">
-                                            {index + 1}
-                                        </span>
-                                        <span className="sr-leaderboard-name">{entry.name}</span>
-                                        <span className="sr-leaderboard-streak">
-                                            🔥 {entry.streak}
-                                        </span>
+                        {activeMockRoomsLoading ? (
+                            <p className="sr-mock-rooms-empty">Loading mock rooms...</p>
+                        ) : activeMockRooms.length === 0 ? (
+                            <p className="sr-mock-rooms-empty">No active mock rooms available.</p>
+                        ) : (
+                            <ul className="sr-mock-room-list">
+                                {activeMockRooms.map((mockRoom) => (
+                                    <li className="sr-mock-room-card" key={mockRoom.session.id}>
+                                        <div className="sr-mock-room-details">
+                                            <h3>{mockRoom.paper.title}</h3>
+                                            <p>Created by: {mockRoom.creator.name}</p>
+                                            <p>Paper: {mockRoom.paper.name}</p>
+                                            <p>Status: Waiting to start</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="sr-mock-room-join"
+                                            onClick={() => handleJoinMockRoom(mockRoom)}
+                                            disabled={!mockRoom.joinable || Boolean(joiningMockSessionId)}
+                                        >
+                                            {joiningMockSessionId === mockRoom.session.id ? 'Joining...' : 'Join'}
+                                        </button>
                                     </li>
                                 ))}
-                            </ol>
+                            </ul>
                         )}
-                    </div>
+                    </section>
                 </aside>
 
                 {/* Center: timer + goal + mock room */}
@@ -839,10 +870,6 @@ const StudyRoom = () => {
                             <span className="sr-quick-title">Create Mock Room</span>
                             <span className="sr-quick-sub">Timed practice + peer review</span>
                         </button>
-                        <div className="sr-quick-card sr-quick-status">
-                            <span className="sr-quick-title">Active submissions</span>
-                            <span className="sr-quick-sub">2 in progress</span>
-                        </div>
                     </div>
 
                     <div className="sr-goal-strip">

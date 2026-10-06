@@ -9,6 +9,8 @@ import {
   getOrCreateAttempt,
   getSessionWithPaper,
   getSubmissionById,
+  joinMockSession,
+  listJoinableMockSessions,
   startMockSession,
   uploadAndStoreMockSubmission,
 } from "../services/mockExam.service";
@@ -150,7 +152,70 @@ export const getMockSessionDetails = async (req: AuthenticatedRequest, res: Resp
 
     return res.status(200).json({ success: true, data: sessionData });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Unable to load the mock session." });
+    const message = error?.message || "Unable to load the mock session.";
+    const status = message.includes("no longer joinable") ? 409 : 500;
+    return res.status(status).json({ success: false, message });
+  }
+};
+
+export const listRoomMockSessions = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const rawRoomId = req.params.roomId;
+    const roomId = Array.isArray(rawRoomId) ? rawRoomId[0] : rawRoomId;
+    if (!roomId) {
+      return res.status(400).json({ success: false, message: "roomId is required." });
+    }
+
+    const sessions = await listJoinableMockSessions(roomId, userId);
+    return res.status(200).json({ success: true, data: sessions });
+  } catch (error: any) {
+    const message = error?.message || "Unable to load active mock rooms.";
+    console.error("Unable to load active mock rooms:", error);
+    const status = message.includes("member of this Study Room") ? 403 : 500;
+    return res.status(status).json({
+      success: false,
+      message: status === 403 ? message : "Unable to load active mock rooms. Please try again.",
+    });
+  }
+};
+
+export const joinMockSessionHandler = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const rawRoomId = req.params.roomId;
+    const roomId = Array.isArray(rawRoomId) ? rawRoomId[0] : rawRoomId;
+    const rawSessionId = req.params.sessionId;
+    const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+    if (!roomId || !sessionId) {
+      return res.status(400).json({ success: false, message: "roomId and sessionId are required." });
+    }
+
+    const result = await joinMockSession(roomId, sessionId, userId);
+    if (!result) {
+      return res.status(404).json({ success: false, message: "Mock session not found in this Study Room." });
+    }
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    const message = error?.message || "Unable to join the mock room.";
+    console.error("Unable to join mock room:", error);
+    const status = message.includes("member of this Study Room") ? 403
+      : message.includes("no longer joinable") ? 409
+        : message.includes("not found") ? 404
+          : 500;
+    const responseMessage = status === 403 || status === 404 || status === 409
+      ? message
+      : "Unable to join this mock room. Please try again.";
+    return res.status(status).json({ success: false, message: responseMessage });
   }
 };
 

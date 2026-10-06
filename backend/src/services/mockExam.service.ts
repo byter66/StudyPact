@@ -46,6 +46,13 @@ export interface MockSession {
   status: "draft" | "live" | "expired" | "completed";
 }
 
+export interface ActiveMockRoom {
+  session: MockSession;
+  creator: { id: string | null; name: string };
+  paper: { id: string; name: string; title: string };
+  joinable: boolean;
+}
+
 export interface MockSubmissionRecord {
   id: string;
   attemptId: string;
@@ -455,6 +462,132 @@ export const getMockSession = async (sessionId: string): Promise<MockSession | n
   };
 };
 
+export const listJoinableMockSessions = async (
+  roomId: string,
+  participantId: string
+): Promise<ActiveMockRoom[]> => {
+  const { data: membership, error: membershipError } = await supabaseAdmin
+    .from("room_members")
+    .select("room_id")
+    .eq("room_id", roomId)
+    .eq("user_id", participantId)
+    .maybeSingle();
+
+  if (membershipError) {
+    throw membershipError;
+  }
+  if (!membership) {
+    throw new Error("You must be a member of this Study Room to view mock exams.");
+  }
+
+  const { data: sessions, error: sessionsError } = await supabaseAdmin
+    .from("mock_sessions")
+    .select("*")
+    .eq("room_id", roomId)
+    .eq("status", "draft")
+    .order("created_at", { ascending: false });
+
+  if (sessionsError) {
+    throw sessionsError;
+  }
+  if (!sessions?.length) {
+    return [];
+  }
+
+  const creatorIds = [...new Set(
+    sessions.map((session) => session.created_by).filter((id): id is string => Boolean(id))
+  )];
+  const paperIds = [...new Set(sessions.map((session) => session.paper_id))];
+  const [{ data: papers, error: papersError }, creatorUsers] = await Promise.all([
+    supabaseAdmin.from("mock_papers").select("id, exam_name, paper_name").in("id", paperIds),
+    Promise.all(creatorIds.map(async (creatorId) => {
+      const { data, error } = await supabaseAdmin.auth.admin.getUserById(creatorId);
+      if (error) {
+        console.warn("Unable to resolve mock room creator name:", error.message);
+        return [creatorId, null] as const;
+      }
+
+      const metadata = data.user?.user_metadata ?? {};
+      return [creatorId, metadata.full_name ?? metadata.name ?? null] as const;
+    })),
+  ]);
+
+  if (papersError) {
+    throw papersError;
+  }
+
+  const creatorNames = new Map(creatorUsers);
+  const paperNames = new Map((papers ?? []).map((paper) => [
+    paper.id,
+    {
+      name: paper.paper_name || "Mock Paper",
+      title: [paper.exam_name, paper.paper_name].filter(Boolean).join(" — ") || "Mock Paper",
+    },
+  ]));
+
+  return sessions.map((row) => ({
+    session: {
+      id: row.id,
+      roomId: row.room_id,
+      paperId: row.paper_id,
+      createdBy: row.created_by ?? null,
+      startedAt: row.started_at,
+      endsAt: row.ends_at,
+      durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+      status: row.status,
+    },
+    creator: {
+      id: row.created_by ?? null,
+      name: (row.created_by && creatorNames.get(row.created_by)) || "StudyPact member",
+    },
+    paper: {
+      id: row.paper_id,
+      ...(paperNames.get(row.paper_id) || { name: "Mock Paper", title: "Mock Paper" }),
+    },
+    joinable: row.status === "draft",
+  }));
+};
+
+export const joinMockSession = async (
+  roomId: string,
+  sessionId: string,
+  participantId: string
+) => {
+  const { data: membership, error: membershipError } = await supabaseAdmin
+    .from("room_members")
+    .select("room_id")
+    .eq("room_id", roomId)
+    .eq("user_id", participantId)
+    .maybeSingle();
+
+  if (membershipError) {
+    throw membershipError;
+  }
+  if (!membership) {
+    throw new Error("You must be a member of this Study Room to join a mock exam.");
+  }
+
+  const session = await getMockSession(sessionId);
+  if (!session || session.roomId !== roomId) {
+    return null;
+  }
+  if (session.status !== "draft") {
+    throw new Error("This mock exam is no longer joinable.");
+  }
+
+  const attempt = await getOrCreateAttempt(sessionId, participantId);
+  const latestSession = await getMockSession(sessionId);
+  if (!latestSession) {
+    return null;
+  }
+  const paper = await getMockPaperById(latestSession.paperId);
+  if (!paper) {
+    throw new Error("The selected mock paper for this session could not be found.");
+  }
+
+  return { session: latestSession, attempt, paper };
+};
+
 export const startMockSession = async (
   sessionId: string,
   participantId: string,
@@ -608,12 +741,16 @@ export const getOrCreateAttempt = async (sessionId: string, participantId: strin
     return existing;
   }
 
+  if (session.status !== "draft") {
+    throw new Error("This mock exam is no longer joinable.");
+  }
+
   const { data, error } = await supabaseAdmin
     .from("participant_attempts")
     .insert({
       session_id: sessionId,
       participant_id: participantId,
-      status: session.status === "live" ? "in_progress" : "draft",
+      status: "draft",
       started_at: session.startedAt ?? new Date().toISOString(),
     })
     .select()
@@ -621,6 +758,46 @@ export const getOrCreateAttempt = async (sessionId: string, participantId: strin
 
   if (error || !data) {
     throw error ?? new Error("Unable to create the participant attempt.");
+  }
+
+  const latestSession = await getMockSession(sessionId);
+  if (!latestSession) {
+    throw new Error("Mock session not found.");
+  }
+  if (latestSession.status === "live") {
+    const { data: startedAttempt, error: startError } = await supabaseAdmin
+      .from("participant_attempts")
+      .update({ status: "in_progress", started_at: latestSession.startedAt })
+      .eq("id", data.id)
+      .eq("status", "draft")
+      .select()
+      .maybeSingle();
+    if (startError) {
+      throw startError;
+    }
+    if (startedAttempt) {
+      return startedAttempt;
+    }
+
+    const { data: existingAttempt, error: attemptError } = await supabaseAdmin
+      .from("participant_attempts")
+      .select("*")
+      .eq("id", data.id)
+      .single();
+    if (attemptError) {
+      throw attemptError;
+    }
+    return existingAttempt;
+  }
+  if (latestSession.status !== "draft") {
+    const { error: cleanupError } = await supabaseAdmin
+      .from("participant_attempts")
+      .delete()
+      .eq("id", data.id);
+    if (cleanupError) {
+      throw cleanupError;
+    }
+    throw new Error("This mock exam is no longer joinable.");
   }
 
   return data;

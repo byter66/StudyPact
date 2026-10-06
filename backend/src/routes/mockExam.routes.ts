@@ -5,6 +5,8 @@ import {
   getMockExam,
   getMockSessionDetails,
   getMockSubmission,
+  joinMockSessionHandler,
+  listRoomMockSessions,
   listMockPapers,
   startMockSessionHandler,
   submitMockExam,
@@ -15,6 +17,8 @@ const router = Router();
 
 router.get("/papers", requireAuth, listMockPapers);
 router.post("/sessions", requireAuth, createMockSessionHandler);
+router.get("/rooms/:roomId/sessions", requireAuth, listRoomMockSessions);
+router.post("/rooms/:roomId/sessions/:sessionId/join", requireAuth, joinMockSessionHandler);
 router.post("/sessions/:sessionId/start", requireAuth, startMockSessionHandler);
 router.get("/sessions/:sessionId", requireAuth, getMockSessionDetails);
 router.get("/", getMockExam);

@@ -218,56 +218,6 @@
     line-height: 1.4;
 }
 
-.sr-leaderboard {
-    border-top: 1px solid #ece6d8;
-    margin-top: 20px;
-    padding-top: 16px;
-}
-
-.sr-leaderboard-list {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.sr-leaderboard-item {
-    display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-}
-
-.sr-leaderboard-you {
-    color: #a8511f;
-    font-weight: 700;
-}
-
-.sr-leaderboard-rank {
-    color: #8a8474;
-}
-
-.sr-leaderboard-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sr-leaderboard-streak {
-    color: #6b6558;
-    white-space: nowrap;
-}
-
-.sr-leaderboard-message {
-    color: #8a8474;
-    font-size: 12px;
-    line-height: 1.4;
-    margin: 0;
-}
-
 /* ---------- Focus panel (center) ---------- */
 
 .sr-focus-panel {
@@ -362,7 +312,7 @@
 
 .sr-quick-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 10px;
     width: 100%;
     margin-bottom: 16px;
@@ -378,6 +328,105 @@
     text-decoration: none;
     color: inherit;
     transition: background 0.2s;
+}
+
+.sr-quick-button {
+    border: 0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sr-quick-button:hover {
+    background: #ece2cc;
+}
+
+.sr-active-mock-rooms {
+    width: 100%;
+    min-height: 0;
+    margin-bottom: 16px;
+}
+
+.sr-active-mock-rooms .sr-panel-label {
+    margin-bottom: 8px;
+    color: #6b6558;
+}
+
+.sr-mock-rooms-empty,
+.sr-mock-rooms-error {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.sr-mock-rooms-empty {
+    color: #8a8474;
+}
+
+.sr-mock-rooms-error {
+    margin-bottom: 8px;
+    color: #a8511f;
+}
+
+.sr-mock-room-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 210px;
+    margin: 0;
+    padding: 0 3px 2px 0;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.sr-mock-room-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid #ece6d8;
+    border-radius: 10px;
+    background: #fffdf8;
+}
+
+.sr-mock-room-details {
+    min-width: 0;
+}
+
+.sr-mock-room-details h3 {
+    margin: 0 0 4px;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.sr-mock-room-details p {
+    margin: 2px 0 0;
+    color: #777064;
+    font-size: 11px;
+}
+
+.sr-mock-room-join {
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 16px;
+    background: #c1602e;
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.sr-mock-room-join:hover:not(:disabled) {
+    background: #a8511f;
+}
+
+.sr-mock-room-join:disabled {
+    cursor: wait;
+    opacity: 0.65;
 }
 
 .sr-modal-open {
