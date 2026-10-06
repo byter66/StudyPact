@@ -1,84 +1,279 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import {
+    createDoubt,
+    createDoubtReply,
+    getDoubts,
+    uploadDoubtImages,
+} from '../../services/doubtService';
+import { supabase } from '../../services/supabaseClient';
 import './DoubtForum.css';
 
-const ROOMS_BY_ID = {
-    r1: { examTag: 'UPSC', title: 'Prelims Revision Pact' },
-    r2: { examTag: 'GATE', title: 'CS Core Subjects' },
-    r3: { examTag: 'NEET', title: 'Biology Daily Grind' },
-    r4: { examTag: 'JEE', title: 'Physics Problem Set' },
-};
+const MAX_IMAGE_COUNT = 3;
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+]);
 
-const INITIAL_DOUBTS = [
-    {
-        id: 'd1',
-        author: 'Kavya',
-        text: "Can someone clarify the difference between Article 32 and Article 226? I keep mixing up when each applies.",
-        hasImage: false,
-        createdAt: '2 hours ago',
-        replies: [
-            { id: 'd1-r1', author: 'Rahul', text: 'Article 32 is a fundamental right itself (only for FR violations), 226 is broader and available in High Courts.', createdAt: '1 hour ago' },
-            { id: 'd1-r2', author: 'Sanjay', text: 'Also 226 covers legal rights too, not just fundamental ones — that\'s the key distinction.', createdAt: '45 min ago' },
-        ],
-    },
-    {
-        id: 'd2',
-        author: 'Divya',
-        text: 'Uploading my handwritten solution for this Polity MCQ — not sure where I went wrong. Attached below.',
-        hasImage: true,
-        createdAt: '5 hours ago',
-        replies: [],
-    },
-    {
-        id: 'd3',
-        author: 'Nikhil',
-        text: 'What\'s the best way to remember the order of Fundamental Duties?',
-        hasImage: false,
-        createdAt: '1 day ago',
-        replies: [
-            { id: 'd3-r1', author: 'Anu', text: 'Try grouping them by theme — nation-related, environment-related, personal conduct. Easier to recall in clusters.', createdAt: '20 hours ago' },
-        ],
-    },
-];
+const readImage = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+        data: String(reader.result).split(',')[1],
+        mimeType: file.type,
+    });
+    reader.onerror = () => reject(new Error('Unable to read the selected image.'));
+    reader.readAsDataURL(file);
+});
+
+const formatDoubt = (doubt) => ({
+    id: doubt.id,
+    author: doubt.authorName || 'StudyPact member',
+    text: doubt.content,
+    images: doubt.images || [],
+    createdAt: doubt.createdAt,
+    replies: (doubt.replies || []).map((reply) => ({
+        id: reply.id,
+        author: reply.authorName || 'StudyPact member',
+        text: reply.content,
+        createdAt: reply.createdAt,
+    })),
+});
 
 const DoubtForum = () => {
     const { id } = useParams();
-    const room = ROOMS_BY_ID[id] || { examTag: 'UPSC', title: 'Study Room' };
 
-    const [doubts, setDoubts] = useState(INITIAL_DOUBTS);
+    const [doubts, setDoubts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [realtimeError, setRealtimeError] = useState('');
     const [draftText, setDraftText] = useState('');
-    const [draftImage, setDraftImage] = useState(null);
+    const [draftImages, setDraftImages] = useState([]);
+    const [posting, setPosting] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [replyingId, setReplyingId] = useState(null);
+    const [postError, setPostError] = useState('');
     const [replyDrafts, setReplyDrafts] = useState({});
     const [openReplyId, setOpenReplyId] = useState(null);
+    const realtimeRetryTimerRef = useRef(null);
+    const realtimeRetryCountRef = useRef(0);
 
-    const handlePostDoubt = (e) => {
-        e.preventDefault();
-        if (!draftText.trim()) return;
-        const newDoubt = {
-            id: `d${Date.now()}`,
-            author: 'You',
-            text: draftText.trim(),
-            hasImage: Boolean(draftImage),
-            createdAt: 'just now',
-            replies: [],
+    useEffect(() => {
+        let isCurrent = true;
+        let channel = null;
+
+        const replaceDoubtFromServer = async (doubtId) => {
+            try {
+                const fetchedDoubts = await getDoubts(id);
+                if (!isCurrent) return;
+
+                const formattedDoubts = fetchedDoubts.map(formatDoubt);
+                if (doubtId && !formattedDoubts.some((doubt) => doubt.id === doubtId)) {
+                    return;
+                }
+
+                setDoubts(formattedDoubts);
+                setRealtimeError('');
+            } catch (error) {
+                if (isCurrent) {
+                    setRealtimeError(error.message || 'Unable to resynchronize forum updates.');
+                }
+            }
         };
-        setDoubts((prev) => [newDoubt, ...prev]);
-        setDraftText('');
-        setDraftImage(null);
+
+        const subscribeToDoubtUpdates = () => {
+            if (!isCurrent) return;
+            if (!supabase) {
+                setRealtimeError('Realtime is not configured for this environment.');
+                return;
+            }
+
+            const subscribedChannel = supabase
+                .channel(`doubt-forum:${id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'doubts',
+                        filter: `room_id=eq.${id}`,
+                    },
+                    ({ new: newDoubt }) => {
+                        if (!newDoubt?.id) return;
+                        void replaceDoubtFromServer(newDoubt.id);
+                    },
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'doubt_replies',
+                    },
+                    ({ new: newReply }) => {
+                        if (!newReply?.id || !newReply.doubt_id) return;
+                        void replaceDoubtFromServer(newReply.doubt_id);
+                    },
+                );
+
+            channel = subscribedChannel;
+            subscribedChannel.subscribe((status) => {
+                if (!isCurrent) return;
+
+                if (status === 'SUBSCRIBED') {
+                    return;
+                }
+
+                if (
+                    status !== 'CHANNEL_ERROR' &&
+                    status !== 'TIMED_OUT' &&
+                    status !== 'CLOSED'
+                ) {
+                    return;
+                }
+
+                if (
+                    realtimeRetryCountRef.current >= 3 ||
+                    realtimeRetryTimerRef.current
+                ) return;
+                realtimeRetryCountRef.current += 1;
+                const retryDelay = realtimeRetryCountRef.current * 1000;
+                realtimeRetryTimerRef.current = window.setTimeout(async () => {
+                    realtimeRetryTimerRef.current = null;
+                    if (!isCurrent) return;
+                    await supabase.removeChannel(subscribedChannel);
+                    await replaceDoubtFromServer();
+                    subscribeToDoubtUpdates();
+                }, retryDelay);
+            });
+        };
+
+        const loadDoubts = async () => {
+            setLoading(true);
+            setLoadError('');
+
+            try {
+                const fetchedDoubts = await getDoubts(id);
+                if (!isCurrent) return;
+
+                setDoubts(fetchedDoubts.map(formatDoubt));
+                setRealtimeError('');
+                subscribeToDoubtUpdates();
+            } catch (error) {
+                if (isCurrent) {
+                    setLoadError(error.message || 'Unable to load doubts.');
+                }
+            } finally {
+                if (isCurrent) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        void loadDoubts();
+
+        return () => {
+            isCurrent = false;
+            if (realtimeRetryTimerRef.current) {
+                window.clearTimeout(realtimeRetryTimerRef.current);
+            }
+            realtimeRetryTimerRef.current = null;
+            realtimeRetryCountRef.current = 0;
+            if (channel) {
+                void supabase?.removeChannel(channel);
+            }
+        };
+    }, [id]);
+
+    const handlePostDoubt = async (e) => {
+        e.preventDefault();
+        const content = draftText.trim();
+        if (!content || posting) return;
+
+        setPosting(true);
+        setPostError('');
+
+        try {
+            const doubt = await createDoubt(id, content);
+            let images = [];
+            if (draftImages.length > 0) {
+                setUploading(true);
+                const imagePayloads = await Promise.all(draftImages.map(readImage));
+                images = await uploadDoubtImages(id, doubt.id, imagePayloads);
+            }
+            setDoubts((prev) => [{
+                id: doubt.id,
+                author: 'You',
+                text: doubt.content,
+                images,
+                createdAt: 'just now',
+                replies: [],
+            }, ...prev]);
+            setDraftText('');
+            setDraftImages([]);
+        } catch (error) {
+            setPostError(error.message || 'Unable to post your doubt.');
+        } finally {
+            setUploading(false);
+            setPosting(false);
+        }
     };
 
-    const handleReplySubmit = (doubtId) => {
+    const handleImageChange = (event) => {
+        const selectedFiles = Array.from(event.target.files || []);
+        if (!selectedFiles.length) return;
+
+        if (selectedFiles.length > MAX_IMAGE_COUNT) {
+            setPostError(`You can attach up to ${MAX_IMAGE_COUNT} images.`);
+            event.target.value = '';
+            return;
+        }
+
+        const invalidFile = selectedFiles.find((file) => (
+            !ALLOWED_IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES
+        ));
+        if (invalidFile) {
+            setPostError('Images must be JPEG, PNG, WebP, or GIF files of 3 MB or less.');
+            event.target.value = '';
+            return;
+        }
+
+        setPostError('');
+        setDraftImages(selectedFiles);
+    };
+
+    const handleReplySubmit = async (doubtId) => {
         const text = (replyDrafts[doubtId] || '').trim();
-        if (!text) return;
-        setDoubts((prev) =>
-            prev.map((d) =>
-                d.id === doubtId
-                    ? { ...d, replies: [...d.replies, { id: `${doubtId}-${Date.now()}`, author: 'You', text, createdAt: 'just now' }] }
-                    : d
-            )
-        );
-        setReplyDrafts((prev) => ({ ...prev, [doubtId]: '' }));
-        setOpenReplyId(null);
+        const doubt = doubts.find((item) => item.id === doubtId);
+        if (!text || !doubt || replyingId === doubtId) return;
+
+        setReplyingId(doubtId);
+        setPostError('');
+
+        try {
+            const reply = await createDoubtReply(id, doubtId, text);
+            const formattedReply = {
+                id: reply.id,
+                author: reply.authorName || 'StudyPact member',
+                text: reply.content,
+                createdAt: reply.createdAt,
+            };
+            setDoubts((prev) =>
+                prev.map((d) =>
+                    d.id === doubtId
+                        ? { ...d, replies: [...d.replies, formattedReply] }
+                        : d
+                )
+            );
+            setReplyDrafts((prev) => ({ ...prev, [doubtId]: '' }));
+            setOpenReplyId(null);
+        } catch (error) {
+            setPostError(error.message || 'Unable to post your reply.');
+        } finally {
+            setReplyingId(null);
+        }
     };
 
     return (
@@ -86,9 +281,7 @@ const DoubtForum = () => {
 
             <header className="df-topbar">
                 <div className="df-room-info">
-                    <span className="df-badge">{room.examTag}</span>
                     <h1 className="df-title">Doubt Forum</h1>
-                    <span className="df-room-name">— {room.title}</span>
                 </div>
                 <Link to={`/study-room/${id}`} className="df-link-btn">Back to room</Link>
             </header>
@@ -97,6 +290,7 @@ const DoubtForum = () => {
 
                 <form className="df-post-card" onSubmit={handlePostDoubt}>
                     <label className="df-field-label" htmlFor="doubt-text">Post a doubt</label>
+                    {postError && <p className="df-post-error" role="alert">{postError}</p>}
                     <textarea
                         id="doubt-text"
                         className="df-textarea"
@@ -104,23 +298,54 @@ const DoubtForum = () => {
                         value={draftText}
                         onChange={(e) => setDraftText(e.target.value)}
                         rows={3}
+                        maxLength={5000}
+                        disabled={posting}
                     />
                     <div className="df-post-actions">
                         <label className="df-upload-btn">
-                            📎 {draftImage ? draftImage.name : 'Attach image'}
+                            📎 {draftImages.length ? `${draftImages.length} image(s) selected` : 'Attach image(s)'}
                             <input
                                 type="file"
-                                accept="image/*"
-                                onChange={(e) => setDraftImage(e.target.files[0] || null)}
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                multiple
+                                onChange={handleImageChange}
+                                disabled={posting}
                                 hidden
                             />
                         </label>
-                        <button type="submit" className="df-btn df-btn-primary">Post doubt</button>
+                        {draftImages.length > 0 && (
+                            <div className="df-selected-images">
+                                {draftImages.map((file) => (
+                                    <span key={`${file.name}-${file.lastModified}`} className="df-selected-image">
+                                        {file.name}
+                                        <button
+                                            type="button"
+                                            aria-label={`Remove ${file.name}`}
+                                            onClick={() => setDraftImages((current) => current.filter((item) => item !== file))}
+                                            disabled={posting}
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        <button
+                            type="submit"
+                            className="df-btn df-btn-primary"
+                            disabled={posting || !draftText.trim()}
+                        >
+                            {uploading ? 'Uploading...' : posting ? 'Posting...' : 'Post doubt'}
+                        </button>
                     </div>
                 </form>
 
+                {loading && <p className="df-state" role="status">Loading doubts...</p>}
+                {loadError && <p className="df-post-error" role="alert">{loadError}</p>}
+                {realtimeError && <p className="df-post-error" role="alert">{realtimeError}</p>}
+
                 <div className="df-thread-list">
-                    {doubts.map((doubt) => (
+                    {!loading && !loadError && doubts.map((doubt) => (
                         <article key={doubt.id} className="df-thread">
                             <div className="df-thread-header">
                                 <span className="df-avatar">{doubt.author.charAt(0)}</span>
@@ -132,12 +357,13 @@ const DoubtForum = () => {
 
                             <p className="df-thread-text">{doubt.text}</p>
 
-                            {doubt.hasImage && (
-                                <div className="df-image-placeholder">
-                                    🖼 Attached image
+                            {doubt.images?.length > 0 && (
+                                <div className="df-image-list">
+                                    {doubt.images.map((image) => (
+                                        <img key={image.id} src={image.url} alt="Attached to doubt" className="df-thread-image" />
+                                    ))}
                                 </div>
                             )}
-
                             <div className="df-thread-footer">
                                 <button
                                     className="df-reply-toggle"
@@ -175,14 +401,16 @@ const DoubtForum = () => {
                                             setReplyDrafts((prev) => ({ ...prev, [doubt.id]: e.target.value }))
                                         }
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleReplySubmit(doubt.id);
+                                            if (e.key === 'Enter') void handleReplySubmit(doubt.id);
                                         }}
+                                        disabled={replyingId === doubt.id}
                                     />
                                     <button
                                         className="df-btn df-btn-outline"
-                                        onClick={() => handleReplySubmit(doubt.id)}
+                                        onClick={() => void handleReplySubmit(doubt.id)}
+                                        disabled={replyingId === doubt.id || !(replyDrafts[doubt.id] || '').trim()}
                                     >
-                                        Reply
+                                        {replyingId === doubt.id ? 'Replying...' : 'Reply'}
                                     </button>
                                 </div>
                             )}

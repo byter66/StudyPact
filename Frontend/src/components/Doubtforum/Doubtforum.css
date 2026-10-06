@@ -28,25 +28,11 @@
     gap: 10px;
 }
 
-.df-badge {
-    background: #f1ebdd;
-    color: #6b6558;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 999px;
-}
-
 .df-title {
     font-family: Georgia, "Times New Roman", serif;
     font-size: 20px;
     font-weight: 700;
     margin: 0;
-}
-
-.df-room-name {
-    font-size: 13px;
-    color: #8a8474;
 }
 
 .df-link-btn {
@@ -93,6 +79,18 @@
     margin-bottom: 8px;
 }
 
+.df-post-error {
+    color: #a33a2b;
+    font-size: 12px;
+    margin: 0 0 10px;
+}
+
+.df-state {
+    color: #8a8474;
+    font-size: 13px;
+    margin: 0;
+}
+
 .df-textarea {
     width: 100%;
     border: 1px solid #e4ddce;
@@ -130,6 +128,43 @@
 
 .df-upload-btn:hover {
     background: #f1ebdd;
+}
+
+.df-selected-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.df-selected-image {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    background: #f1ebdd;
+    border-radius: 999px;
+    padding: 5px 8px 5px 10px;
+    font-size: 11px;
+    color: #6b6558;
+    overflow-wrap: anywhere;
+}
+
+.df-selected-image button {
+    border: none;
+    background: transparent;
+    color: #8a8474;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 2px;
+}
+
+.df-image-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
 }
 
 /* ---------- Buttons ---------- */
@@ -227,17 +262,6 @@
     color: #34302a;
 }
 
-.df-image-placeholder {
-    background: #f1ebdd;
-    border: 1px dashed #d8cdb5;
-    border-radius: 10px;
-    padding: 24px;
-    text-align: center;
-    font-size: 13px;
-    color: #8a8474;
-    margin-bottom: 10px;
-}
-
 .df-thread-footer {
     display: flex;
 }
@@ -315,10 +339,6 @@
 
     .df-title {
         font-size: 16px;
-    }
-
-    .df-room-name {
-        display: none;
     }
 
     .df-post-actions {
