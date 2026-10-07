@@ -6,6 +6,7 @@ import {
   getRoomById,
   isRoomMember,
   leaveRoom as leaveRoomService,
+  MockExamLifecycleActiveError,
   listRoomLeaderboard,
   listRoomMembers,
   joinRoom as joinRoomService,
@@ -287,6 +288,14 @@ export const leaveRoom = async (
     return;
   }
 
-  await leaveRoomService(roomId, userId);
+  try {
+    await leaveRoomService(roomId, userId);
+  } catch (error) {
+    if (error instanceof MockExamLifecycleActiveError) {
+      res.status(error.statusCode).json({ success: false, message: error.message });
+      return;
+    }
+    throw error;
+  }
   res.status(204).send();
 };

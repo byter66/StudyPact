@@ -257,7 +257,8 @@ export const getPeerEvaluationAssignmentHandler = async (req: AuthenticatedReque
     return res.status(200).json({ success: true, data: assignment });
   } catch (error: any) {
     const message = error?.message || "Unable to load this peer evaluation.";
-    const status = message.includes("cannot evaluate") ? 403
+    const status = message.includes("cannot evaluate")
+      || message.includes("must be a member of this Study Room") ? 403
       : message.includes("not found") ? 404
         : message.includes("already been completed") || message.includes("opens after") ? 409
           : message.includes("rubric") ? 422

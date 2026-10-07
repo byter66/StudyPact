@@ -652,9 +652,9 @@ const MockRoom = () => {
                           </ol>
                         </>
                       ) : (
-                        <p>No peer submissions are available for evaluation.</p>
+                        <p>No peer evaluations are currently assigned to you.</p>
                       )}
-                      {!peerEvaluation.allEvaluationsComplete ? (
+                      {peerEvaluation.assignments.length > 0 && !peerEvaluation.allEvaluationsComplete ? (
                         <p className="mr-peer-locked">
                           Complete all assigned peer evaluations to unlock your result.
                         </p>

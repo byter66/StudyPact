@@ -763,14 +763,17 @@ const getPeerEvaluationContext = async (sessionId: string, participantId: string
     throw new Error("Mock session not found.");
   }
 
-  const { data: membership, error: membershipError } = await supabaseAdmin
-    .from("room_members")
-    .select("room_id")
-    .eq("room_id", session.roomId)
-    .eq("user_id", participantId)
-    .maybeSingle();
-  if (membershipError) throw membershipError;
-  if (!membership) throw new Error("You must be a member of this Study Room.");
+  const examEnded = Boolean(session.endsAt && Date.now() >= Date.parse(session.endsAt));
+  if (!examEnded) {
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from("room_members")
+      .select("room_id")
+      .eq("room_id", session.roomId)
+      .eq("user_id", participantId)
+      .maybeSingle();
+    if (membershipError) throw membershipError;
+    if (!membership) throw new Error("You must be a member of this Study Room.");
+  }
 
   const { data: attempt, error: attemptError } = await supabaseAdmin
     .from("participant_attempts")
@@ -807,20 +810,35 @@ const ensurePeerAssignments = async (sessionId: string) => {
 
   const { data: submissions, error: submissionsError } = await supabaseAdmin
     .from("mock_submissions")
-    .select("id, participant_id, submitted_at")
+    .select("id, attempt_id, participant_id, submitted_at")
     .in("status", ["SUBMITTED", "UNDER_EVALUATION", "EVALUATED"])
     .in("attempt_id", sessionAttempts.map((attempt) => attempt.id))
     .not("file_path", "is", null)
     .order("submitted_at", { ascending: true });
 
   if (submissionsError) throw submissionsError;
+  const participantByAttemptId = new Map(
+    sessionAttempts.map((attempt) => [attempt.id, attempt.participant_id])
+  );
   const eligibleSubmissions = [...(submissions ?? [])]
+    .filter((submission) => participantByAttemptId.get(submission.attempt_id) === submission.participant_id)
     .sort((left, right) => left.participant_id.localeCompare(right.participant_id));
   if (!eligibleSubmissions.length) {
     return true;
   }
 
-  const participantIds = [...new Set(eligibleSubmissions.map((submission) => submission.participant_id))].sort();
+  const submittedParticipantIds = [...new Set(
+    eligibleSubmissions.map((submission) => submission.participant_id)
+  )].sort();
+  const { data: roomMembers, error: roomMembersError } = await supabaseAdmin
+    .from("room_members")
+    .select("user_id")
+    .eq("room_id", session.roomId)
+    .in("user_id", submittedParticipantIds);
+  if (roomMembersError) throw roomMembersError;
+
+  const currentMemberIds = new Set((roomMembers ?? []).map((member) => member.user_id));
+  const participantIds = submittedParticipantIds.filter((participantId) => currentMemberIds.has(participantId));
   const evaluatorsPerSubmission = Math.min(3, Math.max(0, participantIds.length - 1));
   const assignments = eligibleSubmissions.flatMap((submission, submissionIndex) => {
     const eligibleEvaluators = participantIds.filter((id) => id !== submission.participant_id);
@@ -892,7 +910,7 @@ export const getPeerEvaluationOverview = async (sessionId: string, participantId
 
   const attemptIdsResult = await supabaseAdmin
     .from("participant_attempts")
-    .select("id")
+    .select("id, participant_id")
     .eq("session_id", sessionId);
   if (attemptIdsResult.error) throw attemptIdsResult.error;
   const sessionAttemptIds = (attemptIdsResult.data ?? []).map((row) => row.id);
@@ -907,8 +925,19 @@ export const getPeerEvaluationOverview = async (sessionId: string, participantId
   if (sessionSubmissionsResult.error) throw sessionSubmissionsResult.error;
   const submissions = sessionSubmissionsResult.data ?? [];
   const submissionById = new Map(submissions.map((submission) => [submission.id, submission]));
+  const participantByAttemptId = new Map(
+    (attemptIdsResult.data ?? []).map((row) => [row.id, row.participant_id])
+  );
   const ownSubmission = submissions.find((submission) => submission.attempt_id === attempt.id) ?? null;
-  const assignedRows = (assignments ?? []).filter((assignment) => submissionById.has(assignment.submission_id));
+  const assignedRows = (assignments ?? []).filter((assignment) => {
+    const submission = submissionById.get(assignment.submission_id);
+    return Boolean(
+      submission
+      && submission.file_path
+      && participantByAttemptId.get(submission.attempt_id) === submission.participant_id
+      && submission.participant_id !== participantId
+    );
+  });
   const assignmentIds = assignedRows.map((assignment) => assignment.id);
   const ownEvaluationScoresResult = ownSubmission
     ? await supabaseAdmin
