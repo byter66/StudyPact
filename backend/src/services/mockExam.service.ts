@@ -146,6 +146,14 @@ export const getEvaluationQuestionMaximum = (question: MockExamQuestion, paper: 
   return parseMark(question.maxMarks, `Question ${question.id} maximum marks`, { allowZero: false });
 };
 
+export const getEvaluationQuestionMinimum = (question: MockExamQuestion, paper: MockExamPaper) => {
+  const rule = resolveQuestionMarkingRule(paper, question);
+  const incorrectMarks = rule?.incorrect;
+  return typeof incorrectMarks === "number" && Number.isFinite(incorrectMarks) && incorrectMarks < 0
+    ? incorrectMarks
+    : 0;
+};
+
 export const mockSubmissionLimits = {
   maxPdfSizeBytes: MAX_PDF_SIZE_BYTES,
 };
@@ -850,7 +858,7 @@ const getPeerEvaluationContext = async (sessionId: string, participantId: string
 const ensurePeerAssignments = async (sessionId: string) => {
   const session = await getMockSession(sessionId);
   const { submissionDeadlineAt } = session ? getMockSessionTiming(session) : { submissionDeadlineAt: null };
-  if (!session || !submissionDeadlineAt || Date.now() < Date.parse(submissionDeadlineAt)) {
+  if (!session || !submissionDeadlineAt || !session.endsAt || Date.now() < Date.parse(session.endsAt)) {
     return false;
   }
 
@@ -879,12 +887,16 @@ const ensurePeerAssignments = async (sessionId: string) => {
     .filter((submission) => participantByAttemptId.get(submission.attempt_id) === submission.participant_id)
     .sort((left, right) => left.participant_id.localeCompare(right.participant_id));
   if (!eligibleSubmissions.length) {
-    return true;
+    return false;
   }
 
   const submittedParticipantIds = [...new Set(
     eligibleSubmissions.map((submission) => submission.participant_id)
   )].sort();
+  const requiredParticipantIds = [...new Set(sessionAttempts.map((attempt) => attempt.participant_id))];
+  if (requiredParticipantIds.some((participantId) => !submittedParticipantIds.includes(participantId))) {
+    return false;
+  }
   const { data: roomMembers, error: roomMembersError } = await supabaseAdmin
     .from("room_members")
     .select("user_id")
@@ -1244,7 +1256,9 @@ export const getPeerEvaluationAssignment = async (
     id: question.id,
     subject: question.subject,
     question: question.question,
+    minMarks: getEvaluationQuestionMinimum(question, paper),
     maxMarks: getEvaluationQuestionMaximum(question, paper),
+    negativeMarks: Math.abs(getEvaluationQuestionMinimum(question, paper)),
     rubric: question.rubric ?? [],
   }));
   if (!questions.length || questions.some((question) => !Number.isFinite(question.maxMarks) || question.maxMarks < 0)) {
@@ -1355,13 +1369,14 @@ export const savePeerEvaluationDraft = async (
     }
     seenQuestionIds.add(questionId);
     const maxMarks = getEvaluationQuestionMaximum(question, paper);
+    const minMarks = getEvaluationQuestionMinimum(question, paper);
     if (
       !Number.isFinite(score)
-      || score < 0
+      || score < minMarks
       || score > maxMarks
       || Math.abs(score * 100 - Math.round(score * 100)) > 1e-8
     ) {
-      throw new Error(`Question scores must be between 0 and ${maxMarks} marks.`);
+      throw new Error(`Question scores must be between ${minMarks} and ${maxMarks} marks.`);
     }
     totalScore += score;
     return { questionId, score, maxMarks };
@@ -1460,13 +1475,14 @@ export const submitPeerEvaluation = async (
     }
     seenQuestionIds.add(questionId);
     const maxMarks = getEvaluationQuestionMaximum(question, paper);
+    const minMarks = getEvaluationQuestionMinimum(question, paper);
     if (
       !Number.isFinite(score)
-      || score < 0
+      || score < minMarks
       || score > maxMarks
       || Math.abs(score * 100 - Math.round(score * 100)) > 1e-8
     ) {
-      throw new Error(`Question scores must be between 0 and ${maxMarks} marks.`);
+      throw new Error(`Question scores must be between ${minMarks} and ${maxMarks} marks.`);
     }
     totalScore += score;
     return { questionId, score, maxMarks };
@@ -2051,6 +2067,7 @@ export const uploadAndStoreMockSubmission = async ({
   if (attemptUpdateError) {
     throw attemptUpdateError;
   }
+  await ensurePeerAssignments(sessionId);
 
   return record;
 };

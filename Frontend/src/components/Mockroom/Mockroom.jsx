@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -65,9 +65,60 @@ const MockRoom = () => {
   const [isStartingExam, setIsStartingExam] = useState(false);
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
+  const mockRoomChannelRef = useRef(null);
   const serverTimeOffsetRef = useRef(0);
   const draftSaveTimerRef = useRef(null);
   const draftSaveQueueRef = useRef(Promise.resolve());
+
+  const applySessionPayload = useCallback((payload) => {
+    const session = payload?.session;
+    const nextPaper = payload?.paper;
+    if (!session || !nextPaper || !Array.isArray(nextPaper.questions)) {
+      throw new Error('Mock session response is missing its selected paper or question list.');
+    }
+    if (!nextPaper.documentUrl && nextPaper.questions.length === 0) {
+      throw new Error('The selected paper response contains no questions or question-paper PDF.');
+    }
+
+    setPaper(nextPaper);
+    setSubmission(payload?.submission ?? null);
+
+    const serverNow = payload?.serverNow ? Date.parse(payload.serverNow) : Date.now();
+    serverTimeOffsetRef.current = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
+    const currentServerTime = Date.now() + serverTimeOffsetRef.current;
+    const endsAtMs = session.endsAt ? Date.parse(session.endsAt) : NaN;
+    const submissionDeadlineAt = payload?.submissionDeadlineAt
+      || (Number.isFinite(endsAtMs)
+        ? new Date(endsAtMs + SUBMISSION_WINDOW_SECONDS * 1000).toISOString()
+        : null);
+    const submissionDeadlineMs = submissionDeadlineAt ? Date.parse(submissionDeadlineAt) : NaN;
+    const secondsLeft = Number.isFinite(endsAtMs)
+      ? Math.max(0, Math.ceil((endsAtMs - currentServerTime) / 1000))
+      : 0;
+    const submissionSecondsLeft = Number.isFinite(submissionDeadlineMs)
+      ? Math.max(0, Math.ceil((submissionDeadlineMs - currentServerTime) / 1000))
+      : 0;
+    setTimeRemaining(secondsLeft);
+    setExamDurationMinutes(session.durationSeconds
+      ? String(Math.ceil(session.durationSeconds / 60))
+      : '');
+    setSessionData({
+      ...session,
+      attempt: payload.attempt ?? null,
+      submissionDeadlineAt,
+    });
+
+    if (session.status === 'draft') {
+      setPhase('draft');
+    } else if (Number.isFinite(endsAtMs) && currentServerTime >= endsAtMs) {
+      setTimeRemaining(submissionSecondsLeft);
+      setPhase(submissionSecondsLeft > 0 ? 'submission-window' : 'closed');
+    } else if (session.status === 'live') {
+      setPhase('live');
+    } else {
+      setPhase('closed');
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -84,58 +135,8 @@ const MockRoom = () => {
       try {
         const response = await getMockSession(sessionId);
         const payload = response?.data ?? response;
-        const session = payload?.session;
-        const nextPaper = payload?.paper;
-        const nextSubmission = payload?.submission ?? null;
-        if (!session || !nextPaper || !Array.isArray(nextPaper.questions)) {
-          throw new Error('Mock session response is missing its selected paper or question list.');
-        }
-        if (!nextPaper.documentUrl && nextPaper.questions.length === 0) {
-          throw new Error('The selected paper response contains no questions or question-paper PDF.');
-        }
-
         if (!isMounted) return;
-
-        setPaper(nextPaper);
-        setSubmission(nextSubmission);
-
-        const serverNow = payload?.serverNow ? Date.parse(payload.serverNow) : Date.now();
-        serverTimeOffsetRef.current = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
-        const currentServerTime = Date.now() + serverTimeOffsetRef.current;
-        const sessionEndsAt = session?.endsAt || payload?.endsAt || null;
-        const endsAtMs = sessionEndsAt ? Date.parse(sessionEndsAt) : NaN;
-        const submissionDeadlineAt = payload?.submissionDeadlineAt
-          || (Number.isFinite(endsAtMs)
-            ? new Date(endsAtMs + SUBMISSION_WINDOW_SECONDS * 1000).toISOString()
-            : null);
-        const submissionDeadlineMs = submissionDeadlineAt ? Date.parse(submissionDeadlineAt) : NaN;
-        const secondsLeft = Number.isFinite(endsAtMs)
-          ? Math.max(0, Math.ceil((endsAtMs - currentServerTime) / 1000))
-          : 0;
-        const submissionSecondsLeft = Number.isFinite(submissionDeadlineMs)
-          ? Math.max(0, Math.ceil((submissionDeadlineMs - currentServerTime) / 1000))
-          : 0;
-        setTimeRemaining(secondsLeft);
-        setExamDurationMinutes(session?.durationSeconds
-          ? String(Math.ceil(session.durationSeconds / 60))
-          : '');
-        const sessionView = {
-          ...session,
-          attempt: payload.attempt ?? null,
-          submissionDeadlineAt,
-        };
-        setSessionData(sessionView);
-
-        if (session?.status === 'draft') {
-          setPhase('draft');
-        } else if (Number.isFinite(endsAtMs) && currentServerTime >= endsAtMs) {
-          setTimeRemaining(submissionSecondsLeft);
-          setPhase(submissionSecondsLeft > 0 ? 'submission-window' : 'closed');
-        } else if (session?.status === 'live') {
-          setPhase('live');
-        } else {
-          setPhase('closed');
-        }
+        applySessionPayload(payload);
       } catch (loadError) {
         if (isMounted) {
           setError(loadError?.message || 'Unable to load the mock session.');
@@ -151,7 +152,42 @@ const MockRoom = () => {
     return () => {
       isMounted = false;
     };
-  }, [sessionId]);
+  }, [applySessionPayload, sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || !supabase) return undefined;
+
+    let isCurrent = true;
+    const refreshSession = async () => {
+      try {
+        const response = await getMockSession(sessionId);
+        if (!isCurrent) return;
+        applySessionPayload(response?.data ?? response);
+        if (Date.parse(response?.data?.session?.endsAt ?? response?.session?.endsAt) <= Date.now()) {
+          const overview = await getPeerEvaluations(sessionId);
+          if (isCurrent) setPeerEvaluation(overview);
+        }
+      } catch (refreshError) {
+        if (isCurrent) {
+          console.error('Unable to refresh mock session state:', refreshError);
+          setError(refreshError?.message || 'Unable to refresh the mock session.');
+        }
+      }
+    };
+    const channel = supabase
+      .channel(`mock-room:${sessionId}`)
+      .on('broadcast', { event: 'session-updated' }, refreshSession)
+      .on('broadcast', { event: 'submission-updated' }, refreshSession);
+
+    mockRoomChannelRef.current = channel;
+    channel.subscribe();
+
+    return () => {
+      isCurrent = false;
+      if (mockRoomChannelRef.current === channel) mockRoomChannelRef.current = null;
+      void supabase.removeChannel(channel);
+    };
+  }, [applySessionPayload, sessionId]);
 
   useEffect(() => {
     if (!sessionData || (phase !== 'live' && phase !== 'submission-window')) return undefined;
@@ -356,6 +392,13 @@ const MockRoom = () => {
         Date.parse(startedSession.endsAt) - Date.now() - serverTimeOffsetRef.current
       ) / 1000)));
       setPhase('live');
+      void mockRoomChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'session-updated',
+        payload: { status: 'live' },
+      })?.catch((broadcastError) => {
+        console.error('Unable to broadcast mock session start:', broadcastError);
+      });
     } catch (startError) {
       setError(startError?.message || 'Unable to start the mock exam.');
     } finally {
@@ -404,6 +447,13 @@ const MockRoom = () => {
 
       if (response?.status === 'SUBMITTED' || response?.data?.status === 'SUBMITTED' || response?.id) {
         setSubmission(response?.data || response || null);
+        void mockRoomChannelRef.current?.send({
+          type: 'broadcast',
+          event: 'submission-updated',
+          payload: { status: 'SUBMITTED' },
+        })?.catch((broadcastError) => {
+          console.error('Unable to broadcast mock submission:', broadcastError);
+        });
       } else {
         throw new Error(response?.message || 'Upload failed.');
       }
@@ -617,7 +667,7 @@ const MockRoom = () => {
                   Return to the StudyRoom when you are ready.
                 </div>
               ) : null}
-              {phase === 'closed' ? (
+              {phase === 'closed' || peerEvaluation?.available ? (
                 <section className="mr-peer-evaluation" aria-labelledby="mr-peer-evaluation-title">
                   <h2 id="mr-peer-evaluation-title">PEER EVALUATION</h2>
                   {peerEvaluationLoading ? <p>Loading peer evaluations...</p> : null}
@@ -718,9 +768,9 @@ const MockRoom = () => {
                           </span>
                           <input
                             type="number"
-                            min="0"
+                            min={question.minMarks ?? -2}
                             max={question.maxMarks}
-                            step="0.01"
+                            step="1"
                             value={evaluationScores[question.id] ?? ''}
                             onChange={(event) => setEvaluationScores((current) => ({
                               ...current,

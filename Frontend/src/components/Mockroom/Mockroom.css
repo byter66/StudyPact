@@ -673,6 +673,12 @@
     overflow-y: auto;
 }
 
+.mr-timer-panel {
+    position: sticky;
+    top: 16px;
+    z-index: 2;
+}
+
 .mr-question-text {
     font-size: 15px;
     line-height: 1.7;
@@ -916,11 +922,15 @@ span.mr-doubt-sub {
 @media (max-width: 900px) {
     .mr-body {
         grid-template-columns: 1fr;
-        overflow-y: auto;
+        overflow: visible;
     }
 
     .mr-page {
         height: auto;
+    }
+
+    .mr-timer-panel {
+        top: 12px;
     }
 }
 
