@@ -79,12 +79,24 @@ export const getMockSessionTiming = (session: MockSession, now = new Date()) => 
     : null,
 });
 
+const parseMark = (value: unknown, label: string, { allowZero = true } = {}) => {
+    const mark = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(mark) || mark < 0 || (!allowZero && mark === 0)) {
+      throw new Error(`${label} must be a finite ${allowZero ? "non-negative" : "positive"} number.`);
+    }
+    return mark;
+};
+
+const getRubricMaximum = (markingScheme: unknown) => {
+    if (!Array.isArray(markingScheme) || markingScheme.length === 0) return null;
+    const marks = markingScheme.map((item: any, index) => (
+      parseMark(item?.marks, `Marking criterion ${index + 1}`)
+    ));
+    return marks.reduce((sum, mark) => sum + mark, 0);
+};
+
 const getEvaluationQuestionMaximum = (question: MockExamQuestion) => {
-  if (!question.rubric?.length) {
-    return Number(question.maxMarks);
-  }
-  const rubricMaximum = question.rubric.reduce((sum, criterion) => sum + Number(criterion.marks), 0);
-  return Math.max(0, Math.min(Number(question.maxMarks), rubricMaximum));
+    return parseMark(question.maxMarks, `Question ${question.id} maximum marks`, { allowZero: false });
 };
 
 export const mockSubmissionLimits = {
@@ -104,9 +116,22 @@ const normalizeDbQuestion = (row: any): MockExamQuestion => {
   const rubric = Array.isArray(row.marking_scheme)
     ? row.marking_scheme.map((item: any) => ({
         criterion: item?.criterion ?? "Criterion",
-        marks: Number(item?.marks ?? 0),
+        marks: parseMark(item?.marks, "Rubric marks"),
       }))
     : undefined;
+  const rubricMaximum = getRubricMaximum(row.marking_scheme);
+  const rawMaximum = row.max_marks === null || row.max_marks === undefined
+    ? null
+    : Number(row.max_marks);
+  const configuredMaximum = rawMaximum === null || rawMaximum === 0
+    ? rubricMaximum
+    : parseMark(rawMaximum, "Question maximum marks", { allowZero: false });
+  if (configuredMaximum === null) {
+    throw new Error(`Question ${row.id} does not have a usable maximum-mark configuration.`);
+  }
+  const negativeMarks = row.negative_marks === null || row.negative_marks === undefined
+    ? 0
+    : parseMark(row.negative_marks, "Question negative marks");
 
   return {
     id: row.id,
@@ -115,17 +140,27 @@ const normalizeDbQuestion = (row: any): MockExamQuestion => {
     question: row.question_text ?? row.question ?? "",
     imageUrl: row.metadata?.image_url ?? undefined,
     options: optionList?.map((option: any) => String(option)),
-    correctAnswer: undefined,
-    maxMarks: Number(row.max_marks ?? 0),
-    negativeMarks: Number(row.negative_marks ?? 0),
+    correctAnswer: row.correct_answer === null || row.correct_answer === undefined
+      ? undefined
+      : String(row.correct_answer),
+    maxMarks: configuredMaximum,
+    negativeMarks,
     rubric,
   };
 };
 
 const normalizeDbPaper = (row: any): MockExamPaper => {
   const questionRows = Array.isArray(row.mock_questions) ? row.mock_questions : [];
+  const questions = questionRows
+    .sort((left: any, right: any) => Number(left.question_number) - Number(right.question_number))
+    .map((question: any) => normalizeDbQuestion(question));
   const paperName = row.paper_name || row.title || row.exam_name || "Mock Paper";
-  const totalMarks = Number(row.total_marks ?? questionRows.reduce((sum: number, question: any) => sum + Number(question.max_marks ?? 0), 0));
+  const configuredTotal = row.total_marks === null || row.total_marks === undefined
+    ? null
+    : Number(row.total_marks);
+  const totalMarks = configuredTotal && Number.isFinite(configuredTotal) && configuredTotal > 0
+    ? configuredTotal
+    : questions.reduce((sum: number, question: MockExamQuestion) => sum + question.maxMarks, 0);
   const durationSeconds = Number(row.duration_seconds ?? 0);
 
   return {
@@ -139,9 +174,7 @@ const normalizeDbPaper = (row: any): MockExamPaper => {
     totalMarks,
     evaluationType: row.evaluation_type || "objective",
     sourceReference: row.source_reference ?? null,
-    questions: questionRows
-      .sort((left: any, right: any) => Number(left.question_number) - Number(right.question_number))
-      .map((question: any) => normalizeDbQuestion(question)),
+    questions,
   };
 };
 
@@ -194,10 +227,12 @@ export const evaluateMockAttempt = (
         ? chosenOption!.toLowerCase() === question.correctAnswer!.toLowerCase()
         : false;
 
-      const awarded = isCorrect ? Number(question.maxMarks || 0) : 0;
+      const positiveMarks = parseMark(question.maxMarks, `Question ${question.id} maximum marks`, { allowZero: false });
+      const negativeMarks = parseMark(question.negativeMarks ?? 0, `Question ${question.id} negative marks`);
+      const awarded = isCorrect ? positiveMarks : normalizedValue ? -negativeMarks : 0;
 
       if (normalizedValue) {
-        summary.objectiveMarks += isCorrect ? Number(question.maxMarks || 0) : -Number(question.negativeMarks || 0);
+        summary.objectiveMarks += awarded;
       }
 
       summary.objectiveResults.push({
@@ -221,7 +256,7 @@ export const evaluateMockAttempt = (
     }
   }
 
-  summary.overall = Math.max(summary.objectiveMarks + summary.writtenMarks, 0);
+  summary.overall = summary.objectiveMarks + summary.writtenMarks;
   return summary;
 };
 
@@ -778,6 +813,7 @@ const ensurePeerAssignments = async (sessionId: string) => {
     .select("id, participant_id, submitted_at")
     .in("status", ["SUBMITTED", "UNDER_EVALUATION", "EVALUATED"])
     .in("attempt_id", sessionAttempts.map((attempt) => attempt.id))
+    .not("file_path", "is", null)
     .order("submitted_at", { ascending: true });
 
   if (submissionsError) throw submissionsError;
@@ -787,7 +823,7 @@ const ensurePeerAssignments = async (sessionId: string) => {
     return true;
   }
 
-  const participantIds = [...new Set(sessionAttempts.map((attempt) => attempt.participant_id))].sort();
+  const participantIds = [...new Set(eligibleSubmissions.map((submission) => submission.participant_id))].sort();
   const evaluatorsPerSubmission = Math.min(3, Math.max(0, participantIds.length - 1));
   const assignments = eligibleSubmissions.flatMap((submission, submissionIndex) => {
     const eligibleEvaluators = participantIds.filter((id) => id !== submission.participant_id);
@@ -1620,7 +1656,7 @@ export const submitAttempt = async (
     Object.entries(answers).map(([key, value]) => [key, typeof value === "string" ? value : String(value ?? "")])
   ));
 
-  const finalScore = Math.max(summary.overall, 0);
+  const finalScore = summary.overall;
   const submittedAt = new Date().toISOString();
 
   await supabaseAdmin

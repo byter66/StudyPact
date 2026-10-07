@@ -48,9 +48,11 @@ export function evaluateMockAttempt(paper, answers = {}) {
         ? choice.toLowerCase() === question.correctAnswer.toLowerCase()
         : false;
 
-      const awarded = isCorrect ? Number(question.maxMarks || 0) : 0;
+      const positiveMarks = Number(question.maxMarks);
+      const negativeMarks = Number(question.negativeMarks ?? 0);
+      const awarded = isCorrect ? positiveMarks : normalizedValue ? -negativeMarks : 0;
       if (normalizedValue) {
-        result.objectiveMarks += isCorrect ? Number(question.maxMarks || 0) : -Number(question.negativeMarks || 0);
+        result.objectiveMarks += awarded;
       }
 
       result.objectiveResults.push({
@@ -75,7 +77,7 @@ export function evaluateMockAttempt(paper, answers = {}) {
     }
   }
 
-  result.overall = Math.max(result.objectiveMarks + result.writtenMarks, 0);
+  result.overall = result.objectiveMarks + result.writtenMarks;
   return result;
 }
 

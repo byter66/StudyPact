@@ -710,7 +710,8 @@ const MockRoom = () => {
                       {activePeerAssignment.questions.map((question, index) => (
                         <label className="mr-peer-score-row" key={question.id}>
                           <span>
-                            Question {index + 1}: {question.subject} (max {question.maxMarks})
+                            Question {index + 1}: {question.subject} (max {question.maxMarks}
+                            {Number(question.negativeMarks) > 0 ? `, -${question.negativeMarks} incorrect` : ''})
                             {question.rubric.length
                               ? ` — ${question.rubric.map((criterion) => `${criterion.criterion} (${criterion.marks})`).join(', ')}`
                               : ''}
