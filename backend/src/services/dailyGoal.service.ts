@@ -21,6 +21,46 @@ const toDailyGoal = (row: DailyGoalRow): DailyGoal =>
 
 const getToday = (): string => new Date().toISOString().slice(0, 10);
 
+export const getDailyGoalStreakResetDate = async (
+  userId: string
+): Promise<string | null> => {
+  const { data, error } = await supabaseAdmin
+    .from("daily_goal_streak_resets")
+    .select("reset_date")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.reset_date ?? null;
+};
+
+const getDailyGoalStreakResetDates = async (
+  userIds: string[]
+): Promise<Map<string, string>> => {
+  if (!userIds.length) return new Map();
+  const { data, error } = await supabaseAdmin
+    .from("daily_goal_streak_resets")
+    .select("user_id, reset_date")
+    .in("user_id", userIds);
+  if (error) throw error;
+  return new Map(
+    (data ?? []).map((row) => [row.user_id, row.reset_date])
+  );
+};
+
+export const resetDailyGoalStreak = async (
+  userId: string
+): Promise<string> => {
+  const resetDate = getToday();
+  const { error } = await supabaseAdmin
+    .from("daily_goal_streak_resets")
+    .upsert(
+      { user_id: userId, reset_date: resetDate },
+      { onConflict: "user_id" }
+    );
+  if (error) throw error;
+  return resetDate;
+};
+
 export const hasDailyGoalForToday = async (userId: string): Promise<boolean> => {
   const { data, error } = await supabaseAdmin
     .from("daily_goals")
@@ -143,7 +183,11 @@ const isCompletedDay = (userId: string, goals: DailyGoalRow[]): boolean => {
   return commitmentPlan.getProgress() === 1;
 };
 
-const calculateCurrentStreak = (userId: string, rows: DailyGoalRow[]): number => {
+const calculateCurrentStreak = (
+  userId: string,
+  rows: DailyGoalRow[],
+  resetDate: string | null = null
+): number => {
   const goalsByDate = new Map<string, DailyGoalRow[]>();
   for (const row of rows) {
     const goals = goalsByDate.get(row.goal_date) ?? [];
@@ -152,8 +196,14 @@ const calculateCurrentStreak = (userId: string, rows: DailyGoalRow[]): number =>
   }
 
   let currentDate = getToday();
+  if (resetDate && currentDate <= resetDate) {
+    return 0;
+  }
   let streak = 0;
-  while (isCompletedDay(userId, goalsByDate.get(currentDate) ?? [])) {
+  while (
+    (!resetDate || currentDate > resetDate)
+    && isCompletedDay(userId, goalsByDate.get(currentDate) ?? [])
+  ) {
     streak += 1;
     currentDate = getPreviousDate(currentDate);
   }
@@ -162,14 +212,21 @@ const calculateCurrentStreak = (userId: string, rows: DailyGoalRow[]): number =>
 
 export const getDailyGoalStreak = async (req: AuthenticatedDailyGoalRequest) => {
   const userId = requireUser(req);
-  const { data, error } = await supabaseAdmin
+  const resetDate = await getDailyGoalStreakResetDate(userId);
+  let goalsQuery = supabaseAdmin
     .from("daily_goals")
     .select(DAILY_GOAL_COLUMNS)
     .eq("user_id", userId)
-    .lte("goal_date", getToday())
     .order("goal_date", { ascending: false });
+  goalsQuery = resetDate
+    ? goalsQuery.gt("goal_date", resetDate)
+    : goalsQuery.lte("goal_date", getToday());
+  const { data, error } = await goalsQuery;
   if (error) throw error;
-  return calculateCurrentStreak(userId, (data ?? []) as DailyGoalRow[]);
+  return {
+    streak: calculateCurrentStreak(userId, (data ?? []) as DailyGoalRow[], resetDate),
+    resetDate,
+  };
 };
 
 export interface DailyGoalLeaderboardEntry {
@@ -264,6 +321,7 @@ export const getDailyGoalLeaderboard = async (): Promise<DailyGoalLeaderboardEnt
   }
 
   const userIds = [...goalsByUser.keys()];
+  const resetDates = await getDailyGoalStreakResetDates(userIds);
   const { data: profiles, error: profileError } = userIds.length
     ? await supabaseAdmin.from("profiles").select("id, full_name").in("id", userIds)
     : { data: [], error: null };
@@ -277,7 +335,11 @@ export const getDailyGoalLeaderboard = async (): Promise<DailyGoalLeaderboardEnt
     .map((userId) => ({
       userId,
       name: namesByUserId.get(userId) || "StudyPact member",
-      streak: calculateCurrentStreak(userId, goalsByUser.get(userId) ?? []),
+      streak: calculateCurrentStreak(
+        userId,
+        goalsByUser.get(userId) ?? [],
+        resetDates.get(userId) ?? null
+      ),
       rank: 0,
     }))
     .sort(
@@ -295,16 +357,24 @@ export const getRoomCurrentStreaks = async (
   userIds: string[]
 ): Promise<Map<string, number>> => {
   const streaks = new Map(userIds.map((userId) => [userId, 0]));
+  const resetDates = await getDailyGoalStreakResetDates(userIds);
   for (const userId of userIds) {
     const { data, error } = await supabaseAdmin
       .from("daily_goals")
       .select(DAILY_GOAL_COLUMNS)
       .eq("user_id", userId)
-      .lte("goal_date", getToday())
+      .gt("goal_date", resetDates.get(userId) ?? "1900-01-01")
       .order("goal_date", { ascending: false });
     if (error) throw error;
 
-    streaks.set(userId, calculateCurrentStreak(userId, (data ?? []) as DailyGoalRow[]));
+    streaks.set(
+      userId,
+      calculateCurrentStreak(
+        userId,
+        (data ?? []) as DailyGoalRow[],
+        resetDates.get(userId) ?? null
+      )
+    );
   }
   return streaks;
 };

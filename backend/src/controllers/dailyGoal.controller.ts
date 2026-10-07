@@ -3,9 +3,11 @@ import {
   completeDailyGoal,
   createTodayDailyGoal,
   getDailyGoalLeaderboard as getGlobalDailyGoalLeaderboard,
+  getDailyGoalStreakResetDate,
   getDailyGoalStreak as getUserDailyGoalStreak,
   getTodayDailyGoals,
   updateDailyGoal,
+  resetDailyGoalStreak as resetUserDailyGoalStreak,
 } from "../services/dailyGoal.service";
 import { AuthenticatedDailyGoalRequest, DailyGoalServiceError } from "../types/dailyGoal.types";
 
@@ -103,7 +105,29 @@ export const postCompleteDailyGoal = async (req: AuthenticatedDailyGoalRequest, 
 export const getDailyGoalStreak = async (req: AuthenticatedDailyGoalRequest, res: Response) => {
   try {
     const streak = await getUserDailyGoalStreak(req);
-    return res.status(200).json({ success: true, data: { streak } });
+    return res.status(200).json({ success: true, data: streak });
+  } catch (error) {
+    if (!handleError(error, res)) throw error;
+  }
+};
+
+export const postResetDailyGoalStreak = async (
+  req: AuthenticatedDailyGoalRequest,
+  res: Response
+) => {
+  if (!req.user?.id) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication is required for daily goals",
+    });
+  }
+  try {
+    const resetDate = await resetUserDailyGoalStreak(req.user.id);
+    const resetMarker = await getDailyGoalStreakResetDate(req.user.id);
+    return res.status(200).json({
+      success: true,
+      data: { streak: 0, resetDate: resetMarker ?? resetDate },
+    });
   } catch (error) {
     if (!handleError(error, res)) throw error;
   }

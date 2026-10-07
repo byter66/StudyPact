@@ -34,6 +34,13 @@ export const getDailyGoalStreak = async () => {
   return result.data;
 };
 
+export const resetDailyGoalStreak = async () => {
+  const result = await apiRequest("/api/daily-goals/streak/reset", {
+    method: "POST",
+  });
+  return result.data;
+};
+
 export const getDailyGoalLeaderboard = async () => {
   const result = await apiRequest("/api/daily-goals/leaderboard");
   return result.data;
