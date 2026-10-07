@@ -9,6 +9,41 @@ const IMAGE_CONCURRENCY = 8;
 const dryRun = process.argv.includes("--dry-run");
 const failedAssets = [];
 
+const getMarkingScheme = (examName, examYear) => {
+  const rules = examName === "NEET"
+    ? {
+        MCQ_SINGLE_CORRECT: {
+          strategy: "single_choice", correct: 4, incorrect: -1, unanswered: 0, maximum: 4,
+        },
+      }
+    : {
+        MCQ_SINGLE_CORRECT: {
+          strategy: "single_choice", correct: 3, incorrect: -1, unanswered: 0, maximum: 3,
+        },
+        MCQ_MULTIPLE_CORRECT: {
+          strategy: "partial_no_incorrect", maximum: 4, incorrect: -2, unanswered: 0,
+          partial: { "1": 1, "2": 2, "3": 3 },
+        },
+        INTEGER: {
+          strategy: "exact_numeric", correct: 4, incorrect: 0, unanswered: 0, maximum: 4,
+        },
+        INTEGER_2: {
+          strategy: "exact_numeric", correct: 4, incorrect: 0, unanswered: 0, maximum: 4,
+        },
+        MCQ_MATCHING: {
+          strategy: "matching", correct: 3, incorrect: -1, unanswered: 0, maximum: 3,
+        },
+      };
+
+  return {
+    schemeId: `${examName === "NEET" ? "neet" : "jee_advanced"}_${examYear}`,
+    version: 1,
+    exam: examName,
+    year: examYear,
+    rules,
+  };
+};
+
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -269,6 +304,7 @@ const persistPapers = async (rows) => {
       evaluation_type: "objective",
       source: `huggingface:${DATASET}`,
       source_reference: sourceReference,
+      marking_scheme: getMarkingScheme(examName, examYear),
     };
 
     let paperId = existingPaper?.id;

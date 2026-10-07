@@ -18,6 +18,10 @@ export interface MockExamQuestion {
   maxMarks: number;
   negativeMarks?: number;
   rubric?: MockExamRubricItem[];
+  metadata?: {
+    source_question_type?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface MockExamPaper {
@@ -32,7 +36,25 @@ export interface MockExamPaper {
   evaluationType?: string;
   sourceReference?: string | null;
   documentUrl?: string | null;
+  markingScheme?: MockExamMarkingScheme | null;
   questions: MockExamQuestion[];
+}
+
+interface MockExamMarkingRule {
+  strategy?: string;
+  maximum?: number;
+  correct?: number;
+  incorrect?: number;
+  unanswered?: number;
+  partial?: Record<string, number>;
+}
+
+export interface MockExamMarkingScheme {
+  schemeId: string;
+  version: number;
+  exam: string;
+  year?: number;
+  rules: Record<string, MockExamMarkingRule>;
 }
 
 export interface MockSession {
@@ -95,8 +117,33 @@ const getRubricMaximum = (markingScheme: unknown) => {
     return marks.reduce((sum, mark) => sum + mark, 0);
 };
 
-const getEvaluationQuestionMaximum = (question: MockExamQuestion) => {
-    return parseMark(question.maxMarks, `Question ${question.id} maximum marks`, { allowZero: false });
+export const resolveQuestionMarkingRule = (
+  paper: MockExamPaper,
+  question: MockExamQuestion,
+): MockExamMarkingRule | null => {
+  const explicit = (question.metadata?.marking_scheme ?? question.metadata?.markingScheme);
+  if (explicit && typeof explicit === "object" && !Array.isArray(explicit)) {
+    return explicit as MockExamMarkingRule;
+  }
+
+  const sourceType = typeof question.metadata?.source_question_type === "string"
+    ? question.metadata.source_question_type
+    : undefined;
+  const normalizedType = typeof question.metadata?.question_type === "string"
+    ? question.metadata.question_type
+    : undefined;
+  const scheme = paper.markingScheme;
+  return scheme?.rules[sourceType ?? ""]
+    ?? scheme?.rules[normalizedType ?? ""]
+    ?? null;
+};
+
+export const getEvaluationQuestionMaximum = (question: MockExamQuestion, paper: MockExamPaper) => {
+  const rule = resolveQuestionMarkingRule(paper, question);
+  if (rule?.maximum !== undefined) {
+    return parseMark(rule.maximum, `Question ${question.id} maximum marks`, { allowZero: false });
+  }
+  return parseMark(question.maxMarks, `Question ${question.id} maximum marks`, { allowZero: false });
 };
 
 export const mockSubmissionLimits = {
@@ -143,6 +190,13 @@ const normalizeDbQuestion = (row: any): MockExamQuestion => {
     maxMarks: configuredMaximum,
     negativeMarks,
     rubric,
+    metadata: {
+      ...(row.metadata ?? {}),
+      question_type: row.question_type,
+      ...(row.marking_scheme && !Array.isArray(row.marking_scheme)
+        ? { marking_scheme: row.marking_scheme }
+        : {}),
+    },
   };
 };
 
@@ -171,6 +225,7 @@ const normalizeDbPaper = (row: any): MockExamPaper => {
     totalMarks,
     evaluationType: row.evaluation_type || "objective",
     sourceReference: row.source_reference ?? null,
+    markingScheme: row.marking_scheme ?? null,
     questions,
   };
 };
@@ -1189,7 +1244,7 @@ export const getPeerEvaluationAssignment = async (
     id: question.id,
     subject: question.subject,
     question: question.question,
-    maxMarks: getEvaluationQuestionMaximum(question),
+    maxMarks: getEvaluationQuestionMaximum(question, paper),
     rubric: question.rubric ?? [],
   }));
   if (!questions.length || questions.some((question) => !Number.isFinite(question.maxMarks) || question.maxMarks < 0)) {
@@ -1299,7 +1354,7 @@ export const savePeerEvaluationDraft = async (
       throw new Error("The evaluation contains an invalid rubric question.");
     }
     seenQuestionIds.add(questionId);
-    const maxMarks = getEvaluationQuestionMaximum(question);
+    const maxMarks = getEvaluationQuestionMaximum(question, paper);
     if (
       !Number.isFinite(score)
       || score < 0
@@ -1312,7 +1367,7 @@ export const savePeerEvaluationDraft = async (
     return { questionId, score, maxMarks };
   });
   const maximumScore = [...questions.values()].reduce(
-    (sum, question) => sum + getEvaluationQuestionMaximum(question),
+    (sum, question) => sum + getEvaluationQuestionMaximum(question, paper),
     0,
   );
   if (totalScore > maximumScore) {
@@ -1404,7 +1459,7 @@ export const submitPeerEvaluation = async (
       throw new Error("The evaluation contains an invalid rubric question.");
     }
     seenQuestionIds.add(questionId);
-    const maxMarks = getEvaluationQuestionMaximum(question);
+    const maxMarks = getEvaluationQuestionMaximum(question, paper);
     if (
       !Number.isFinite(score)
       || score < 0
@@ -1417,7 +1472,7 @@ export const submitPeerEvaluation = async (
     return { questionId, score, maxMarks };
   });
   const maximumScore = [...questions.values()].reduce(
-    (sum, question) => sum + getEvaluationQuestionMaximum(question),
+    (sum, question) => sum + getEvaluationQuestionMaximum(question, paper),
     0,
   );
   if (totalScore > maximumScore) {
