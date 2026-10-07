@@ -124,11 +124,8 @@ const normalizeDbQuestion = (row: any): MockExamQuestion => {
     ? null
     : Number(row.max_marks);
   const configuredMaximum = rawMaximum === null || rawMaximum === 0
-    ? rubricMaximum
+    ? rubricMaximum ?? 0
     : parseMark(rawMaximum, "Question maximum marks", { allowZero: false });
-  if (configuredMaximum === null) {
-    throw new Error(`Question ${row.id} does not have a usable maximum-mark configuration.`);
-  }
   const negativeMarks = row.negative_marks === null || row.negative_marks === undefined
     ? 0
     : parseMark(row.negative_marks, "Question negative marks");
