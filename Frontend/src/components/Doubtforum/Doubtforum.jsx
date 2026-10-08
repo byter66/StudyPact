@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import {
     createDoubt,
     createDoubtReply,
@@ -44,6 +44,8 @@ const formatDoubt = (doubt) => ({
 
 const DoubtForum = () => {
     const { id } = useParams();
+    const location = useLocation();
+    const returnTo = location.state?.returnTo || `/study-room/${id}`;
 
     const [doubts, setDoubts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -281,9 +283,9 @@ const DoubtForum = () => {
 
             <header className="df-topbar">
                 <div className="df-room-info">
-                    <h1 className="df-title">Doubt Forum</h1>
+                    <h1 className="df-title">Doubt Forum — Study Room</h1>
                 </div>
-                <Link to={`/study-room/${id}`} className="df-link-btn">Back to room</Link>
+                <Link to={returnTo} className="df-link-btn">Back to room</Link>
             </header>
 
             <div className="df-body">

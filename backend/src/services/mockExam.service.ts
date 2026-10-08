@@ -943,6 +943,35 @@ const ensurePeerAssignments = async (sessionId: string) => {
   return true;
 };
 
+const broadcastMockRoomUpdate = async (
+  sessionId: string,
+  event: string,
+  payload: Record<string, unknown>,
+) => {
+  const channel = supabaseAdmin.channel(`mock-room:${sessionId}`);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Timed out subscribing to the mock-room update channel.")), 5000);
+      channel.subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          clearTimeout(timeout);
+          try {
+            await channel.send({ type: "broadcast", event, payload });
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+          clearTimeout(timeout);
+          reject(new Error(`Unable to subscribe to the mock-room update channel: ${status}`));
+        }
+      });
+    });
+  } finally {
+    await supabaseAdmin.removeChannel(channel);
+  }
+};
+
 const signedSubmissionUrl = async (filePath: string) => {
   const { data, error } = await supabaseAdmin.storage
     .from(MOCK_SUBMISSIONS_BUCKET)
@@ -2067,7 +2096,15 @@ export const uploadAndStoreMockSubmission = async ({
   if (attemptUpdateError) {
     throw attemptUpdateError;
   }
-  await ensurePeerAssignments(sessionId);
+  const peerEvaluationAvailable = await ensurePeerAssignments(sessionId);
+  try {
+    await broadcastMockRoomUpdate(sessionId, "submission-updated", {
+      status: "SUBMITTED",
+      peerEvaluationAvailable,
+    });
+  } catch (broadcastError) {
+    console.error("Unable to broadcast mock submission update:", broadcastError);
+  }
 
   return record;
 };

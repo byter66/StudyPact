@@ -162,10 +162,18 @@ const MockRoom = () => {
       try {
         const response = await getMockSession(sessionId);
         if (!isCurrent) return;
-        applySessionPayload(response?.data ?? response);
-        if (Date.parse(response?.data?.session?.endsAt ?? response?.session?.endsAt) <= Date.now()) {
+        const payload = response?.data ?? response;
+        applySessionPayload(payload);
+        const endsAt = payload?.session?.endsAt;
+        if (endsAt && Date.parse(endsAt) <= Date.now()) {
           const overview = await getPeerEvaluations(sessionId);
-          if (isCurrent) setPeerEvaluation(overview);
+          if (isCurrent) {
+            setPeerEvaluation(overview);
+            if (overview?.available) {
+              setTimeRemaining(0);
+              setPhase('closed');
+            }
+          }
         }
       } catch (refreshError) {
         if (isCurrent) {
@@ -447,6 +455,15 @@ const MockRoom = () => {
 
       if (response?.status === 'SUBMITTED' || response?.data?.status === 'SUBMITTED' || response?.id) {
         setSubmission(response?.data || response || null);
+        const sessionResponse = await getMockSession(sessionId);
+        const sessionPayload = sessionResponse?.data ?? sessionResponse;
+        applySessionPayload(sessionPayload);
+        const overview = await getPeerEvaluations(sessionId);
+        if (overview?.available) {
+          setPeerEvaluation(overview);
+          setTimeRemaining(0);
+          setPhase('closed');
+        }
         void mockRoomChannelRef.current?.send({
           type: 'broadcast',
           event: 'submission-updated',
@@ -571,7 +588,7 @@ const MockRoom = () => {
 
   if (sessionLoading) {
     return (
-      <div className="mr-page">
+      <div className={`mr-page ${phase === 'live' ? 'mr-live-page' : ''}`}>
         <div className="mr-loading">Loading mock session…</div>
       </div>
     );
@@ -709,6 +726,17 @@ const MockRoom = () => {
                           Complete all assigned peer evaluations to unlock your result.
                         </p>
                       ) : null}
+                      <Link
+                        to={`/doubt-forum/${sessionData.roomId}`}
+                        state={{ returnTo: `/mock-room/${sessionId}` }}
+                        className="mr-doubt-entry"
+                      >
+                        <span className="mr-doubt-icon" aria-hidden="true">?</span>
+                        <span>
+                          <span className="mr-doubt-title">Doubt Forum — Study Room</span>
+                          <span className="mr-doubt-sub">Ask questions while evaluating peer papers</span>
+                        </span>
+                      </Link>
                       {peerEvaluation.ownResult ? (
                         <div className="mr-peer-result">
                           <h3>Your evaluated answer script</h3>

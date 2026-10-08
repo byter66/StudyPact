@@ -244,6 +244,15 @@
     overflow: hidden;
 }
 
+.mr-live-page {
+    height: 100vh;
+    overflow: hidden;
+}
+
+.mr-live-page .mr-body {
+    min-height: 0;
+}
+
 .mr-upload-panel {
     display: flex;
     flex-direction: column;
@@ -931,6 +940,25 @@ span.mr-doubt-sub {
 
     .mr-timer-panel {
         top: 12px;
+    }
+
+    .mr-live-page .mr-body {
+        padding-top: 148px;
+    }
+
+    .mr-live-page .mr-timer-panel {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        right: 12px;
+        z-index: 10;
+        min-height: 124px;
+        padding: 12px;
+    }
+
+    .mr-live-page .mr-timer-ring-wrapper {
+        width: 96px;
+        height: 96px;
     }
 }
 
