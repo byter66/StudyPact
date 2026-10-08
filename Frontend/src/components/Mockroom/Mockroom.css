@@ -251,7 +251,15 @@
 
 .mr-live-page .mr-body {
     min-height: 0;
-    grid-template-columns: minmax(0, 1fr) 220px;
+    display: flex;
+    height: 0;
+    align-items: stretch;
+}
+
+.mr-live-page .mr-paper-panel {
+    flex: 1;
+    height: auto;
+    min-height: 0;
 }
 
 .mr-live-page .mr-timer-panel {
@@ -604,6 +612,8 @@
 }
 
 .mr-paper-display {
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding-right: 4px;
 }
@@ -958,12 +968,17 @@ span.mr-doubt-sub {
         height: auto;
     }
 
+    .mr-live-page {
+        height: 100vh;
+        overflow: hidden;
+    }
+
     .mr-timer-panel {
         top: 12px;
     }
 
     .mr-live-page .mr-body {
-        padding-top: 148px;
+        padding-top: 0;
     }
 
     .mr-live-page .mr-timer-panel {

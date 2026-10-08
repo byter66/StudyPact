@@ -502,9 +502,11 @@ const MockRoom = () => {
         assignmentId: evaluation.assignmentId,
         participantName: evaluation.participantName,
       });
+      return true;
     } catch (loadError) {
       console.error('Unable to open peer evaluation:', loadError);
       setPeerEvaluationError(loadError?.message || 'Unable to open this peer evaluation.');
+      return false;
     }
   };
 
@@ -517,8 +519,9 @@ const MockRoom = () => {
     ) return;
     const assignment = peerEvaluation.assignments.find((item) => item.id === assignmentId);
     if (!assignment) return;
-    restoredAssignmentRef.current = assignmentId;
-    void handleOpenPeerAssignment(assignment);
+    void handleOpenPeerAssignment(assignment).then((restored) => {
+      if (restored) restoredAssignmentRef.current = assignmentId;
+    });
   }, [location.state, peerEvaluation]);
 
   const handleOpenAuthorDiscussion = (evaluation) => {
@@ -620,7 +623,7 @@ const MockRoom = () => {
   }
 
   return (
-    <div className="mr-page">
+    <div className={`mr-page ${phase === 'live' ? 'mr-live-page' : ''}`}>
       <header className="mr-topbar">
         <div className="mr-room-info">
           <span className="mr-badge">{paper?.examTag || 'Mock'}</span>
@@ -741,20 +744,27 @@ const MockRoom = () => {
                           Complete all assigned peer evaluations to unlock your result.
                         </p>
                       ) : null}
-                      <Link
-                        to={`/doubt-forum/${sessionData.roomId}`}
-                        state={{
-                          returnTo: `/mock-room/${sessionId}`,
-                          assignmentId: activePeerAssignment?.assignmentId || null,
-                        }}
-                        className="mr-doubt-entry"
-                      >
-                        <span className="mr-doubt-icon" aria-hidden="true">?</span>
-                        <span>
-                          <span className="mr-doubt-title">Doubt Forum — Study Room</span>
-                          <span className="mr-doubt-sub">Ask questions while evaluating peer papers</span>
-                        </span>
-                      </Link>
+                      {(() => {
+                        const evaluationContextId = activePeerAssignment?.assignmentId
+                          || discussionAssignment?.assignmentId;
+                        if (!evaluationContextId) return null;
+                        return (
+                          <Link
+                            to={`/doubt-forum/${sessionData.roomId}`}
+                            state={{
+                              returnTo: `/mock-room/${sessionId}`,
+                              assignmentId: evaluationContextId,
+                            }}
+                            className="mr-doubt-entry"
+                          >
+                            <span className="mr-doubt-icon" aria-hidden="true">?</span>
+                            <span>
+                              <span className="mr-doubt-title">Doubt Forum — Study Room</span>
+                              <span className="mr-doubt-sub">Ask questions while evaluating peer papers</span>
+                            </span>
+                          </Link>
+                        );
+                      })()}
                       {peerEvaluation.ownResult ? (
                         <div className="mr-peer-result">
                           <h3>Your evaluated answer script</h3>

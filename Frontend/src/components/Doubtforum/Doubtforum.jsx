@@ -46,6 +46,9 @@ const DoubtForum = () => {
     const { id } = useParams();
     const location = useLocation();
     const returnTo = location.state?.returnTo || `/study-room/${id}`;
+    const returnState = location.state?.returnTo && location.state?.assignmentId
+        ? { assignmentId: location.state.assignmentId }
+        : undefined;
 
     const [doubts, setDoubts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -285,7 +288,7 @@ const DoubtForum = () => {
                 <div className="df-room-info">
                     <h1 className="df-title">Doubt Forum — Study Room</h1>
                 </div>
-                <Link to={returnTo} className="df-link-btn">
+                <Link to={returnTo} state={returnState} className="df-link-btn">
                     {location.state?.returnTo ? 'Back to Evaluation' : 'Back to Study Room'}
                 </Link>
             </header>
