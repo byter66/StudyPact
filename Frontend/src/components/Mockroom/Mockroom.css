@@ -251,6 +251,26 @@
 
 .mr-live-page .mr-body {
     min-height: 0;
+    grid-template-columns: minmax(0, 1fr) 220px;
+}
+
+.mr-live-page .mr-timer-panel {
+    position: fixed;
+    top: 88px;
+    right: 24px;
+    width: 220px;
+    min-height: 220px;
+    z-index: 20;
+    padding: 18px;
+}
+
+.mr-live-page .mr-timer-ring-wrapper {
+    width: 168px;
+    height: 168px;
+}
+
+.mr-live-page .mr-timer-value {
+    font-size: 30px;
 }
 
 .mr-upload-panel {

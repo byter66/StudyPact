@@ -285,7 +285,9 @@ const DoubtForum = () => {
                 <div className="df-room-info">
                     <h1 className="df-title">Doubt Forum — Study Room</h1>
                 </div>
-                <Link to={returnTo} className="df-link-btn">Back to room</Link>
+                <Link to={returnTo} className="df-link-btn">
+                    {location.state?.returnTo ? 'Back to Evaluation' : 'Back to Study Room'}
+                </Link>
             </header>
 
             <div className="df-body">

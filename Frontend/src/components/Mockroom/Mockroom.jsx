@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   getEvaluationDiscussion,
@@ -34,6 +34,7 @@ const formatFileSize = (bytes) => {
 
 const MockRoom = () => {
   const { id } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
   const sessionId = id;
 
@@ -69,6 +70,7 @@ const MockRoom = () => {
   const serverTimeOffsetRef = useRef(0);
   const draftSaveTimerRef = useRef(null);
   const draftSaveQueueRef = useRef(Promise.resolve());
+  const restoredAssignmentRef = useRef(null);
 
   const applySessionPayload = useCallback((payload) => {
     const session = payload?.session;
@@ -506,6 +508,19 @@ const MockRoom = () => {
     }
   };
 
+  useEffect(() => {
+    const assignmentId = location.state?.assignmentId;
+    if (
+      !assignmentId
+      || restoredAssignmentRef.current === assignmentId
+      || !peerEvaluation?.available
+    ) return;
+    const assignment = peerEvaluation.assignments.find((item) => item.id === assignmentId);
+    if (!assignment) return;
+    restoredAssignmentRef.current = assignmentId;
+    void handleOpenPeerAssignment(assignment);
+  }, [location.state, peerEvaluation]);
+
   const handleOpenAuthorDiscussion = (evaluation) => {
     setDiscussionError('');
     setDiscussionAssignment({
@@ -596,7 +611,7 @@ const MockRoom = () => {
 
   if (!sessionData && !paper) {
     return (
-      <div className="mr-page">
+      <div className={`mr-page ${phase === 'live' ? 'mr-live-page' : ''}`}>
         <div className="mr-loading" role={error ? 'alert' : 'status'}>
           {error || 'Mock session not found.'}
         </div>
@@ -728,7 +743,10 @@ const MockRoom = () => {
                       ) : null}
                       <Link
                         to={`/doubt-forum/${sessionData.roomId}`}
-                        state={{ returnTo: `/mock-room/${sessionId}` }}
+                        state={{
+                          returnTo: `/mock-room/${sessionId}`,
+                          assignmentId: activePeerAssignment?.assignmentId || null,
+                        }}
                         className="mr-doubt-entry"
                       >
                         <span className="mr-doubt-icon" aria-hidden="true">?</span>
