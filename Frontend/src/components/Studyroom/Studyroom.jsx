@@ -30,7 +30,8 @@ const STATUS_LABEL = {
 
 const STATUS_CYCLE = ['studying', 'break', 'away'];
 
-const FOCUS_MINUTES = 25;
+const DEFAULT_FOCUS_MINUTES = 20;
+const BREAK_MINUTES = 5;
 
 const createMessageId = () => (
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -68,9 +69,11 @@ const StudyRoom = () => {
     const [paperSearch, setPaperSearch] = useState('');
     const [examDurationMinutes, setExamDurationMinutes] = useState('');
     const [customQuestionPaper, setCustomQuestionPaper] = useState(null);
+    const [focusMinutes, setFocusMinutes] = useState(DEFAULT_FOCUS_MINUTES);
+    const [timerPhase, setTimerPhase] = useState('focus');
 
     const [myStatus, setMyStatus] = useState('studying');
-    const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
+    const [secondsLeft, setSecondsLeft] = useState(DEFAULT_FOCUS_MINUTES * 60);
     const [isRunning, setIsRunning] = useState(false);
     const [messages, setMessages] = useState([]);
     const [draft, setDraft] = useState('');
@@ -89,6 +92,7 @@ const StudyRoom = () => {
     myStatusRef.current = myStatus;
     const chatMessagesRef = useRef(null);
     const chatWasNearBottomRef = useRef(true);
+    const [isChatOpen, setIsChatOpen] = useState(false);
 
     useEffect(() => {
         const loadAvailablePapers = async () => {
@@ -162,6 +166,9 @@ const StudyRoom = () => {
         let channel = null;
         let roomMembers = [];
         let memberRequestId = 0;
+        let reconnectTimer = null;
+        let reconnectAttempts = 0;
+        let reconnecting = false;
 
         const syncPresence = () => {
             if (!isCurrent) return;
@@ -243,17 +250,20 @@ const StudyRoom = () => {
                     return;
                 }
 
-                channel = supabase.channel(`room-presence:${roomId}`, {
-                    config: { presence: { key: userId } },
-                });
-                presenceChannelRef.current = channel;
-                presenceSubscribedRef.current = false;
+                const subscribeToRoom = () => {
+                    if (!isCurrent || reconnecting) return;
+                    reconnecting = true;
+                    channel = supabase.channel(`room-presence:${roomId}`, {
+                        config: { presence: { key: userId } },
+                    });
+                    presenceChannelRef.current = channel;
+                    presenceSubscribedRef.current = false;
 
-                channel
-                    .on('presence', { event: 'sync' }, handlePresenceChange)
-                    .on('presence', { event: 'join' }, handlePresenceChange)
-                    .on('presence', { event: 'leave' }, handlePresenceChange)
-                    .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
+                    channel
+                        .on('presence', { event: 'sync' }, handlePresenceChange)
+                        .on('presence', { event: 'join' }, handlePresenceChange)
+                        .on('presence', { event: 'leave' }, handlePresenceChange)
+                        .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
                         if (
                             !isCurrent ||
                             !payload?.id ||
@@ -279,37 +289,50 @@ const StudyRoom = () => {
                                 },
                             ];
                         });
-                    });
-
-                channel.subscribe(async (status) => {
-                    if (!isCurrent) return;
-
-                    if (status === 'SUBSCRIBED') {
-                        setRealtimeError('');
-                        presenceSubscribedRef.current = true;
-                        const { error } = await channel.track({
-                            user_id: userId,
-                            display_name: presenceDisplayName,
-                            status: myStatusRef.current,
                         });
+
+                    channel.subscribe(async (status) => {
                         if (!isCurrent) return;
-                        if (error) {
-                            setRealtimeError('Unable to announce your presence. Please retry.');
-                        } else {
-                            syncPresence();
+
+                        if (status === 'SUBSCRIBED') {
+                            reconnectAttempts = 0;
+                            reconnecting = false;
+                            setRealtimeError('');
+                            presenceSubscribedRef.current = true;
+                            const { error } = await channel.track({
+                                user_id: userId,
+                                display_name: presenceDisplayName,
+                                status: myStatusRef.current,
+                            });
+                            if (!isCurrent) return;
+                            if (error) {
+                                setRealtimeError('Unable to announce your presence. Please retry.');
+                            } else {
+                                syncPresence();
+                                void refreshMembers();
+                            }
+                        } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+                            presenceSubscribedRef.current = false;
+                            reconnecting = false;
+                            if (reconnectAttempts >= 3 || reconnectTimer) {
+                                setRealtimeError('Realtime connection could not be restored. Please re-enter the room.');
+                                return;
+                            }
+                            reconnectAttempts += 1;
+                            setRealtimeError(`Realtime connection ${status.toLowerCase().replace('_', ' ')}. Reconnecting...`);
+                            const failedChannel = channel;
+                            reconnectTimer = window.setTimeout(async () => {
+                                reconnectTimer = null;
+                                if (!isCurrent) return;
+                                await supabase.removeChannel(failedChannel);
+                                if (channel === failedChannel) channel = null;
+                                subscribeToRoom();
+                            }, reconnectAttempts * 1000);
                         }
-                    } else if (
-                        status === 'CHANNEL_ERROR' ||
-                        status === 'TIMED_OUT' ||
-                        status === 'CLOSED'
-                    ) {
-                        setRealtimeError(
-                            status === 'CLOSED'
-                                ? 'Realtime channel closed. Re-enter the room to reconnect.'
-                                : `Realtime connection ${status.toLowerCase().replace('_', ' ')}. Waiting for automatic retry.`,
-                        );
-                    }
-                });
+                    });
+                };
+
+                subscribeToRoom();
             } catch (error) {
                 if (isCurrent) {
                     setRoomError(error.message || 'Unable to load this room.');
@@ -330,6 +353,7 @@ const StudyRoom = () => {
 
         return () => {
             isCurrent = false;
+            if (reconnectTimer) window.clearTimeout(reconnectTimer);
             presenceSubscribedRef.current = false;
             presenceChannelRef.current = null;
             if (channel) {
@@ -434,21 +458,32 @@ const StudyRoom = () => {
             : 0;
 
         return Math.min(
-            FOCUS_MINUTES * 60,
+            focusMinutes * 60,
             accumulatedFocusedSecondsRef.current + runningSeconds,
         );
     };
 
     useEffect(() => {
-        if (!isRunning || !startedAtRef.current) {
+        if (!isRunning || (timerPhase === 'focus' && !startedAtRef.current)) {
             return undefined;
         }
 
         const updateCountdown = () => {
+            if (timerPhase === 'break') {
+                const remainingBreak = Math.max(0, secondsLeft - 1);
+                setSecondsLeft(remainingBreak);
+                if (remainingBreak === 0) {
+                    setTimerPhase('focus');
+                    setSecondsLeft(focusMinutes * 60);
+                    setIsRunning(false);
+                    startedAtRef.current = null;
+                }
+                return;
+            }
             const elapsedSeconds = getFocusedDuration();
             const remainingSeconds = Math.max(
                 0,
-                FOCUS_MINUTES * 60 - elapsedSeconds,
+                focusMinutes * 60 - elapsedSeconds,
             );
 
             setSecondsLeft(remainingSeconds);
@@ -456,7 +491,9 @@ const StudyRoom = () => {
             if (remainingSeconds === 0) {
                 clearInterval(intervalRef.current);
                 startedAtRef.current = null;
-                setIsRunning(false);
+                setTimerPhase('break');
+                setSecondsLeft(BREAK_MINUTES * 60);
+                setIsRunning(true);
 
                 const currentSessionId = sessionIdRef.current;
                 if (
@@ -468,7 +505,7 @@ const StudyRoom = () => {
                     operationInProgressRef.current = true;
                     completePomodoroSession(
                         currentSessionId,
-                        FOCUS_MINUTES * 60,
+                        focusMinutes * 60,
                     )
                         .then(() => {
                             setSessionStatus('completed');
@@ -488,7 +525,7 @@ const StudyRoom = () => {
         intervalRef.current = setInterval(updateCountdown, 1000);
 
         return () => clearInterval(intervalRef.current);
-    }, [isRunning]);
+    }, [focusMinutes, isRunning, secondsLeft, timerPhase]);
 
     const formatTime = (secs) => {
         const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -509,10 +546,14 @@ const StudyRoom = () => {
 
         try {
             if (isRunning) {
+                if (timerPhase === 'break') {
+                    setIsRunning(false);
+                    return;
+                }
                 const currentFocusedDuration = getFocusedDuration();
                 setIsRunning(false);
                 startedAtRef.current = null;
-                setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
+                setSecondsLeft(focusMinutes * 60 - currentFocusedDuration);
                 setSessionStatus('paused');
 
                 await updatePomodoroSession(sessionIdRef.current, {
@@ -526,6 +567,11 @@ const StudyRoom = () => {
 
             let currentSessionId = sessionIdRef.current;
             let currentFocusedDuration = accumulatedFocusedSecondsRef.current;
+            if (timerPhase === 'break') {
+                startedAtRef.current = Date.now();
+                setIsRunning(true);
+                return;
+            }
 
             if (sessionStatus === 'paused' && currentSessionId) {
                 await updatePomodoroSession(currentSessionId, {
@@ -535,7 +581,7 @@ const StudyRoom = () => {
             } else {
                 const session = await createPomodoroSession(
                     roomId,
-                    FOCUS_MINUTES * 60,
+                    focusMinutes * 60,
                 );
                 currentSessionId = session.id;
                 setSessionId(currentSessionId);
@@ -547,7 +593,7 @@ const StudyRoom = () => {
 
             startedAtRef.current = Date.now();
             accumulatedFocusedSecondsRef.current = currentFocusedDuration;
-            setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
+            setSecondsLeft(focusMinutes * 60 - currentFocusedDuration);
             setSessionStatus('active');
             setIsRunning(true);
         } catch (error) {
@@ -581,7 +627,8 @@ const StudyRoom = () => {
             setSessionStatus(null);
             accumulatedFocusedSecondsRef.current = 0;
             completionAttemptedRef.current = false;
-            setSecondsLeft(FOCUS_MINUTES * 60);
+            setTimerPhase('focus');
+            setSecondsLeft(focusMinutes * 60);
         } catch (error) {
             setPomodoroError(error.message);
         } finally {
@@ -705,7 +752,7 @@ const StudyRoom = () => {
     };
 
     const completedGoals = dailyGoals.filter((goal) => goal.isCompleted).length;
-    const progressPercent = (FOCUS_MINUTES * 60 - secondsLeft) / (FOCUS_MINUTES * 60) * 100;
+    const progressPercent = (focusMinutes * 60 - secondsLeft) / (focusMinutes * 60) * 100;
 
     if (roomLoading) {
         return (
@@ -827,11 +874,29 @@ const StudyRoom = () => {
                         </svg>
                         <div className="sr-timer-center">
                             <span className="sr-timer-value">{formatTime(secondsLeft)}</span>
-                            <span className="sr-timer-caption">Focus session</span>
+                            <span className="sr-timer-caption">{timerPhase === 'break' ? 'Break' : 'Focus session'}</span>
                         </div>
                     </div>
 
                     <div className="sr-timer-controls">
+                        <label className="sr-focus-duration">
+                            Focus
+                            <input
+                                type="number"
+                                min="1"
+                                max="120"
+                                step="1"
+                                value={focusMinutes}
+                                onChange={(event) => {
+                                    if (!isRunning && timerPhase === 'focus') {
+                                        setFocusMinutes(Math.max(1, Math.min(120, Number(event.target.value) || DEFAULT_FOCUS_MINUTES)));
+                                        setSecondsLeft(Math.max(1, Math.min(120, Number(event.target.value) || DEFAULT_FOCUS_MINUTES)) * 60);
+                                    }
+                                }}
+                                disabled={isRunning || timerPhase === 'break'}
+                            />
+                            min
+                        </label>
                         <button className="sr-btn sr-btn-outline" onClick={handleReset}>Reset</button>
                         <button
                             className="sr-btn sr-btn-primary"
@@ -898,7 +963,7 @@ const StudyRoom = () => {
 
                 {/* Right: chat + doubt forum */}
                 <aside className="sr-panel sr-side-panel">
-                    <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry">
+                    <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry sr-floating-forum" aria-label="Open Doubt Forum">
                         <span className="sr-doubt-icon">💬</span>
                         <div>
                             <span className="sr-doubt-title">Doubt Forum</span>
@@ -906,8 +971,20 @@ const StudyRoom = () => {
                         </div>
                     </Link>
 
-                    <div className="sr-chat">
-                        <p className="sr-panel-label">Room chat</p>
+                    <button
+                        type="button"
+                        className="sr-chat-toggle"
+                        aria-expanded={isChatOpen}
+                        onClick={() => setIsChatOpen((open) => !open)}
+                    >
+                        <span aria-hidden="true">💬</span>
+                        {isChatOpen ? 'Hide room chat' : 'Open room chat'}
+                    </button>
+                    {isChatOpen && <div className="sr-chat">
+                        <div className="sr-chat-heading">
+                            <p className="sr-panel-label">Room chat</p>
+                            <button type="button" className="sr-chat-close" onClick={() => setIsChatOpen(false)} aria-label="Close room chat">×</button>
+                        </div>
                         <div
                             ref={chatMessagesRef}
                             className="sr-chat-messages"
@@ -940,7 +1017,7 @@ const StudyRoom = () => {
                             />
                             <button type="submit" className="sr-chat-send">Send</button>
                         </form>
-                    </div>
+                    </div>}
                 </aside>
 
             </div>
@@ -1092,6 +1169,21 @@ const StudyRoom = () => {
 
                             <label className="sr-paper-select-label" htmlFor="mock-exam-duration">
                                 Duration (minutes)
+                                <select
+                                    className="sr-paper-select"
+                                    value={['15', '30', '45', '60', '90'].includes(examDurationMinutes) ? examDurationMinutes : 'custom'}
+                                    onChange={(event) => {
+                                        if (event.target.value !== 'custom') setExamDurationMinutes(event.target.value);
+                                    }}
+                                    disabled={creatingMockSession}
+                                >
+                                    <option value="15">15 minutes</option>
+                                    <option value="30">30 minutes</option>
+                                    <option value="45">45 minutes</option>
+                                    <option value="60">60 minutes</option>
+                                    <option value="90">90 minutes</option>
+                                    <option value="custom">Custom</option>
+                                </select>
                                 <input
                                     id="mock-exam-duration"
                                     className="sr-paper-select sr-duration-input"

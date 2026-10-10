@@ -517,12 +517,34 @@ const MockRoom = () => {
       || restoredAssignmentRef.current === assignmentId
       || !peerEvaluation?.available
     ) return;
-    const assignment = peerEvaluation.assignments.find((item) => item.id === assignmentId);
-    if (!assignment) return;
-    void handleOpenPeerAssignment(assignment).then((restored) => {
+    if (activePeerAssignment?.assignmentId === assignmentId) {
+      restoredAssignmentRef.current = assignmentId;
+      return;
+    }
+    void getPeerEvaluation(sessionId, assignmentId).then((evaluation) => {
+      setActivePeerAssignment(evaluation);
+      const savedScores = Object.fromEntries(
+        evaluation.questions.map((question) => [question.id, '']),
+      );
+      evaluation.rubricScores.forEach((score) => {
+        if (Object.hasOwn(savedScores, score.questionId)) {
+          savedScores[score.questionId] = String(score.score);
+        }
+      });
+      setEvaluationScores(savedScores);
+      setEvaluationComments(evaluation.comments || '');
+      setDiscussionAssignment({
+        assignmentId: evaluation.assignmentId,
+        participantName: evaluation.participantName,
+      });
+      return true;
+    }).catch((loadError) => {
+      setPeerEvaluationError(loadError?.message || 'Unable to restore this peer evaluation.');
+      return false;
+    }).then((restored) => {
       if (restored) restoredAssignmentRef.current = assignmentId;
     });
-  }, [location.state, peerEvaluation]);
+  }, [activePeerAssignment, location.state, peerEvaluation, sessionId]);
 
   const handleOpenAuthorDiscussion = (evaluation) => {
     setDiscussionError('');

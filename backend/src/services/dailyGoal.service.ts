@@ -20,6 +20,8 @@ const toDailyGoal = (row: DailyGoalRow): DailyGoal =>
   );
 
 const getToday = (): string => new Date().toISOString().slice(0, 10);
+const isMissingResetTable = (error: { code?: string; message?: string } | null): boolean =>
+  error?.code === "PGRST205" || error?.message?.includes("daily_goal_streak_resets") === true;
 
 export const getDailyGoalStreakResetDate = async (
   userId: string
@@ -29,7 +31,10 @@ export const getDailyGoalStreakResetDate = async (
     .select("reset_date")
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (isMissingResetTable(error)) return null;
+    throw error;
+  }
   return data?.reset_date ?? null;
 };
 
@@ -41,7 +46,10 @@ const getDailyGoalStreakResetDates = async (
     .from("daily_goal_streak_resets")
     .select("user_id, reset_date")
     .in("user_id", userIds);
-  if (error) throw error;
+  if (error) {
+    if (isMissingResetTable(error)) return new Map();
+    throw error;
+  }
   return new Map(
     (data ?? []).map((row) => [row.user_id, row.reset_date])
   );
