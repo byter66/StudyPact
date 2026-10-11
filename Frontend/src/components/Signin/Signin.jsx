@@ -195,9 +195,6 @@ const Signin = () => {
                                             autoFocus
                                         />
                                     </div>
-                                    <span className="terminal-field-caption">
-                                        Verification code will be delivered via SMS
-                                    </span>
                                 </div>
 
                                 {otpSent && (
