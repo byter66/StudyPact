@@ -322,15 +322,10 @@ const DoubtForum = () => {
                             <ArrowLeft size={16} />
                             <span>Back to Evaluation</span>
                         </Link>
-                    ) : id && id !== '1' ? (
+                    ) : (
                         <Link to={`/study-room/${id}`} className="sp-tribunal-back-btn">
                             <ArrowLeft size={16} />
                             <span>Back to Study Room</span>
-                        </Link>
-                    ) : (
-                        <Link to="/dashboard" className="sp-tribunal-back-btn">
-                            <ArrowLeft size={16} />
-                            <span>Back to Dashboard</span>
                         </Link>
                     )}
                     <div className="sp-tribunal-chamber-tag">
@@ -346,10 +341,7 @@ const DoubtForum = () => {
                     </div>
                 </div>
 
-                <div className="sp-tribunal-bar-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Link to="/dashboard" className="sp-tribunal-back-btn" style={{ textDecoration: 'none' }}>
-                        <span>Dashboard</span>
-                    </Link>
+                <div className="sp-tribunal-bar-right">
                     <div className="sp-tribunal-metric-badge">
                         <MessageSquare size={13} />
                         <span>{doubts.length} Doubts Posted</span>

@@ -1,20 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BookOpen, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Signup.css';
 import { authService } from '../../services/authService';
-import { useAuth } from '../../context/AuthContext';
 
 const Signup = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
     const [fullName, setFullName] = useState('');
-
-    useEffect(() => {
-        if (user) {
-            navigate('/dashboard', { replace: true });
-        }
-    }, [user, navigate]);
     const [phone, setPhone] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);

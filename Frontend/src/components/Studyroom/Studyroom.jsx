@@ -20,7 +20,7 @@ import {
 import { completeDailyGoal, getTodayDailyGoals } from '../../services/dailyGoalService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { X, Check, FileText, ArrowRight, ArrowLeft, HelpCircle } from 'lucide-react';
+import { X, Check, FileText, ArrowRight, HelpCircle } from 'lucide-react';
 import './Studyroom.css';
 
 const STATUS_LABEL = {
@@ -799,8 +799,8 @@ const StudyRoom = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Link to="/dashboard" className="sr-link-btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        <ArrowLeft size={14} /> Dashboard
+                    <Link to="/dashboard" className="sr-link-btn" style={{ textDecoration: 'none' }}>
+                        Dashboard
                     </Link>
                     <button
                         type="button"

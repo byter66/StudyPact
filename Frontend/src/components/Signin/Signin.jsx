@@ -1,21 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BookOpen, ArrowLeft, ArrowRight, ShieldCheck, Flame, Radio } from 'lucide-react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './Signin.css';
 import { authService } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 
 const Signin = () => {
     const navigate = useNavigate();
-    const location = useLocation();
-    const { user, setUser } = useAuth();
-
-    useEffect(() => {
-        if (user) {
-            const destination = location.state?.from?.pathname || '/dashboard';
-            navigate(destination, { replace: true });
-        }
-    }, [user, location.state, navigate]);
+    const { setUser } = useAuth();
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [otpSent, setOtpSent] = useState(false);
@@ -61,8 +53,7 @@ const Signin = () => {
             const result = await authService.verifyOtp(normalizePhone(phone), otp);
             if (result?.user) {
                 setUser(result.user);
-                const destination = location.state?.from?.pathname || '/dashboard';
-                navigate(destination, { replace: true });
+                navigate('/dashboard');
             }
         } catch (verifyError) {
             setError(verifyError.message || 'OTP verification failed.');
@@ -204,6 +195,9 @@ const Signin = () => {
                                             autoFocus
                                         />
                                     </div>
+                                    <span className="terminal-field-caption">
+                                        Verification code will be delivered via SMS
+                                    </span>
                                 </div>
 
                                 {otpSent && (
