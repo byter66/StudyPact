@@ -11,6 +11,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import './Landing.css';
+import { useAuth } from '../../context/AuthContext';
 
 const SCHEDULE_BOARD = [
   {
@@ -88,6 +89,7 @@ const SCHEDULE_BOARD = [
 ];
 
 export default function Landing() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('ALL');
   const [quickCode, setQuickCode] = useState('');
   const [activeChecklist, setActiveChecklist] = useState({
@@ -160,7 +162,7 @@ export default function Landing() {
               className="quickbox-input"
             />
             <Link
-              to={quickCode ? `/study-room/${quickCode}` : '/signin'}
+              to={quickCode ? `/study-room/${quickCode}` : user ? '/dashboard' : '/signin'}
               className="btn btn-primary btn-sm quickbox-btn"
             >
               Enter
@@ -170,12 +172,21 @@ export default function Landing() {
 
         {/* Auth CTAs in Rail */}
         <div className="sp-rail-footer">
-          <Link to="/signin" className="btn btn-secondary btn-sm sp-rail-auth-btn">
-            Sign In to StudyPact
-          </Link>
-          <Link to="/signup" className="btn btn-primary btn-sm sp-rail-auth-btn">
-            Create Free Account
-          </Link>
+          {user ? (
+            <Link to="/dashboard" className="btn btn-primary btn-sm sp-rail-auth-btn">
+              <span>Go to Dashboard</span>
+              <ArrowRight size={14} />
+            </Link>
+          ) : (
+            <>
+              <Link to="/signin" className="btn btn-secondary btn-sm sp-rail-auth-btn">
+                Sign In to StudyPact
+              </Link>
+              <Link to="/signup" className="btn btn-primary btn-sm sp-rail-auth-btn">
+                Create Free Account
+              </Link>
+            </>
+          )}
           <div className="sp-rail-copyright">
             &copy; 2026 StudyPact. Built for competitive exam discipline.
           </div>
@@ -194,8 +205,17 @@ export default function Landing() {
             <span className="crumb-active">NATIONAL EXAMINATION LEDGER</span>
           </div>
           <div className="topbar-actions">
-            <Link to="/signin" className="btn btn-ghost btn-sm">Sign In</Link>
-            <Link to="/signup" className="btn btn-primary btn-sm">Start a Pact</Link>
+            {user ? (
+              <Link to="/dashboard" className="btn btn-primary btn-sm">
+                <span>Dashboard</span>
+                <ArrowRight size={14} />
+              </Link>
+            ) : (
+              <>
+                <Link to="/signin" className="btn btn-ghost btn-sm">Sign In</Link>
+                <Link to="/signup" className="btn btn-primary btn-sm">Start a Pact</Link>
+              </>
+            )}
           </div>
         </div>
 
@@ -215,10 +235,17 @@ export default function Landing() {
           </p>
 
           <div className="manifesto-cta-row">
-            <Link to="/signup" className="btn btn-primary btn-lg manifesto-btn">
-              <span>Start Studying Now</span>
-              <ArrowRight size={16} />
-            </Link>
+            {user ? (
+              <Link to="/dashboard" className="btn btn-primary btn-lg manifesto-btn">
+                <span>Go to Dashboard</span>
+                <ArrowRight size={16} />
+              </Link>
+            ) : (
+              <Link to="/signup" className="btn btn-primary btn-lg manifesto-btn">
+                <span>Start Studying Now</span>
+                <ArrowRight size={16} />
+              </Link>
+            )}
             <a href="#schedule-board" className="btn btn-secondary btn-lg">
               <span>Browse Study Rooms</span>
               <ChevronRight size={16} />
@@ -516,10 +543,17 @@ export default function Landing() {
               Designed exclusively for aspirants of UPSC, GATE, JEE, NEET, and serious competitive examinations.
             </p>
             <div className="covenant-buttons">
-              <Link to="/signup" className="btn btn-primary btn-lg cta-gold">
-                <span>Join StudyPact &middot; Get Started Free</span>
-                <ArrowRight size={16} />
-              </Link>
+              {user ? (
+                <Link to="/dashboard" className="btn btn-primary btn-lg cta-gold">
+                  <span>Go to Dashboard</span>
+                  <ArrowRight size={16} />
+                </Link>
+              ) : (
+                <Link to="/signup" className="btn btn-primary btn-lg cta-gold">
+                  <span>Join StudyPact &middot; Get Started Free</span>
+                  <ArrowRight size={16} />
+                </Link>
+              )}
             </div>
           </div>
         </section>
@@ -541,8 +575,14 @@ export default function Landing() {
           </div>
           <div className="footer-col">
             <span className="footer-col-title">RESOURCES</span>
-            <Link to="/signin">Sign In</Link>
-            <Link to="/signup">Create Account</Link>
+            {user ? (
+              <Link to="/dashboard">Dashboard</Link>
+            ) : (
+              <>
+                <Link to="/signin">Sign In</Link>
+                <Link to="/signup">Create Account</Link>
+              </>
+            )}
             <a href="#schedule-board">Live Directory</a>
           </div>
         </footer>
