@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import {
     createDoubt,
     createDoubtReply,
@@ -66,6 +66,8 @@ function DoubtForumInner() {
     const { id, roomId } = useParams();
     const currentRoomId = id || roomId;
     const location = useLocation();
+    const [searchParams] = useSearchParams();
+    const focusedDoubtId = searchParams.get('doubtId');
     const returnTo = location.state?.returnTo;
     const assignmentId = location.state?.assignmentId;
     const savedScores = location.state?.savedScores;
@@ -87,6 +89,12 @@ function DoubtForumInner() {
     const realtimeRetryTimerRef = useRef(null);
     const realtimeRetryCountRef = useRef(0);
     const channelRef = useRef(null);
+    const replyRequestIdsRef = useRef(new Map());
+
+    useEffect(() => {
+        if (!focusedDoubtId || loading || !doubts.some((doubt) => doubt.id === focusedDoubtId)) return;
+        document.getElementById(`doubt-${focusedDoubtId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [doubts, focusedDoubtId, loading]);
 
     // Mark replies as read on mount
     useEffect(() => {
@@ -321,7 +329,13 @@ function DoubtForumInner() {
         setPostError('');
 
         try {
-            const reply = await createDoubtReply(currentRoomId, doubtId, text);
+            const previousRequest = replyRequestIdsRef.current.get(doubtId);
+            const requestId = previousRequest?.content === text
+                ? previousRequest.requestId
+                : crypto.randomUUID();
+            replyRequestIdsRef.current.set(doubtId, { content: text, requestId });
+            const reply = await createDoubtReply(currentRoomId, doubtId, text, requestId);
+            replyRequestIdsRef.current.delete(doubtId);
             const formattedReply = {
                 id: reply.id,
                 author: reply.authorName || 'Student',
@@ -331,7 +345,9 @@ function DoubtForumInner() {
             setDoubts((prev) =>
                 prev.map((d) =>
                     d.id === doubtId
-                        ? { ...d, replies: [...d.replies, formattedReply] }
+                        ? { ...d, replies: d.replies.some((item) => item.id === formattedReply.id)
+                            ? d.replies
+                            : [...d.replies, formattedReply] }
                         : d
                 )
             );
@@ -450,7 +466,7 @@ function DoubtForumInner() {
 
                 <div className="df-thread-list">
                     {!loading && !loadError && doubts.map((doubt) => (
-                        <article key={doubt.id} className="df-thread">
+                        <article id={`doubt-${doubt.id}`} key={doubt.id} className={`df-thread ${focusedDoubtId === doubt.id ? 'df-thread-focused' : ''}`}>
                             <div className="df-thread-header">
                                 <span className="df-avatar">{doubt.author.charAt(0).toUpperCase()}</span>
                                 <div className="df-thread-meta">

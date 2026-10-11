@@ -771,7 +771,7 @@ const MockRoom = () => {
                           <ul>
                             {peerEvaluation.ownResult.evaluations.map((evaluation, index) => (
                               <li key={`${evaluation.submittedAt}-${index}`}>
-                                <strong>{evaluation.evaluator}:</strong> {evaluation.score} marks
+                                <strong>{evaluation.evaluator}:</strong> {evaluation.score === null ? 'Written feedback' : `${evaluation.score} marks`}
                                 {evaluation.comments ? <p>{evaluation.comments}</p> : null}
                                 {Array.isArray(evaluation.rubricScores) && evaluation.rubricScores.length ? (
                                   <ul>
@@ -795,6 +795,9 @@ const MockRoom = () => {
                       <a href={activePeerAssignment.answerScriptUrl} target="_blank" rel="noreferrer">
                         View / download answer script
                       </a>
+                      {activePeerAssignment.questions.length === 0 ? (
+                        <p>This custom paper has no structured rubric. Inspect the answer script and leave written feedback.</p>
+                      ) : null}
                       {activePeerAssignment.questions.map((question, index) => (
                         <label className="mr-peer-score-row" key={question.id}>
                           <span>
@@ -831,7 +834,7 @@ const MockRoom = () => {
                       <button
                         type="submit"
                         className="mr-btn mr-btn-primary"
-                        disabled={isSubmittingEvaluation}
+                        disabled={isSubmittingEvaluation || (activePeerAssignment.questions.length === 0 && !evaluationComments.trim())}
                       >
                         {isSubmittingEvaluation ? 'Submitting...' : 'Submit Evaluation'}
                       </button>

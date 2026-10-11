@@ -8,6 +8,7 @@ import dailyGoalRoutes from "./routes/dailyGoal.routes";
 import userTaskRoutes from "./routes/userTask.routes";
 import mockExamRoutes from "./routes/mockExam.routes";
 import doubtRoutes from "./routes/doubt.routes";
+import notificationRoutes from "./routes/notification.routes";
 import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
@@ -30,6 +31,7 @@ app.use("/api", userTaskRoutes);
 app.use("/api/mock", mockExamRoutes);
 app.use("/api/mock-exams", mockExamRoutes);
 app.use("/api", doubtRoutes);
+app.use("/api", notificationRoutes);
 app.use("/api/auth", authRoutes);
 
 app.use(errorHandler);

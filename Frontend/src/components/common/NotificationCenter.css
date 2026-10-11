@@ -1,0 +1,89 @@
+.sp-notification-center {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 150;
+}
+
+.sp-notification-toggle {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid #d8d1c4;
+  border-radius: 50%;
+  background: #fffdf8;
+  color: #29251f;
+  box-shadow: 0 4px 16px #14171524;
+  cursor: pointer;
+}
+
+.sp-notification-toggle:hover { background: #f0ece1; }
+.sp-notification-toggle:focus-visible,
+.sp-notification-popover button:focus-visible { outline: 2px solid #ba4a2b; outline-offset: 3px; }
+
+.sp-notification-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 19px;
+  padding: 2px 5px;
+  border-radius: 10px;
+  background: #ba4a2b;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sp-notification-popover {
+  position: absolute;
+  right: 0;
+  bottom: 60px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 480px);
+  overflow: auto;
+  border: 1px solid #e6e1d6;
+  border-radius: 12px;
+  background: #fffdf8;
+  box-shadow: 0 12px 36px #14171524;
+}
+
+.sp-notification-popover > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 15px;
+  border-bottom: 1px solid #e6e1d6;
+}
+
+.sp-notification-popover > header button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sp-notification-item {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 15px;
+  border: 0;
+  border-bottom: 1px solid #eee9de;
+  background: transparent;
+  color: #29251f;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sp-notification-item:hover { background: #f7f2e9; }
+.sp-notification-item.is-unread { border-left: 3px solid #ba4a2b; }
+.sp-notification-item time { color: #7a756d; font-size: 11px; }
+.sp-notification-empty { margin: 0; padding: 18px 15px; color: #7a756d; font-size: 13px; }
+
+@media (max-width: 640px) {
+  .sp-notification-center { right: 14px; bottom: 14px; }
+}

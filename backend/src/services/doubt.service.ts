@@ -191,7 +191,8 @@ export const createDoubtReply = async (
   roomId: string,
   doubtId: string,
   userId: string,
-  content: string
+  content: string,
+  requestId?: string,
 ): Promise<DoubtReply | null> => {
   const { data: doubt, error: doubtError } = await supabaseAdmin
     .from("doubts")
@@ -207,16 +208,28 @@ export const createDoubtReply = async (
     return null;
   }
 
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from("doubt_replies")
     .insert({
       doubt_id: doubtId,
       user_id: userId,
       content: content.trim(),
+      ...(requestId ? { client_request_id: requestId } : {}),
     })
     .select("id, doubt_id, user_id, content, created_at, updated_at")
     .single();
 
+  if (error?.code === "23505" && requestId) {
+    const existing = await supabaseAdmin
+      .from("doubt_replies")
+      .select("id, doubt_id, user_id, content, created_at, updated_at")
+      .eq("doubt_id", doubtId)
+      .eq("user_id", userId)
+      .eq("client_request_id", requestId)
+      .single();
+    data = existing.data;
+    error = existing.error;
+  }
   if (error) {
     throw error;
   }

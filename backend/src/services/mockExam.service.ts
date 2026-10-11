@@ -1071,10 +1071,11 @@ export const getPeerEvaluationOverview = async (sessionId: string, participantId
     const expectedEvaluationCount = (ownEvaluationScoresResult.data ?? []).length;
     const allEvaluatorsComplete = expectedEvaluationCount > 0
       && receivedEvaluationRows.length === ownEvaluationScoresResult.data!.length;
-    const finalScore = receivedEvaluationRows.length
+    const scoredEvaluations = receivedEvaluationRows.filter((item) => item.score!.score !== null);
+    const finalScore = scoredEvaluations.length
       ? Number((
-          receivedEvaluationRows.reduce((sum, item) => sum + Number(item.score!.score), 0)
-          / receivedEvaluationRows.length
+          scoredEvaluations.reduce((sum, item) => sum + Number(item.score!.score), 0)
+          / scoredEvaluations.length
         ).toFixed(2))
       : null;
 
@@ -1104,11 +1105,11 @@ export const getPeerEvaluationOverview = async (sessionId: string, participantId
       finalScore: allEvaluatorsComplete ? finalScore : null,
       receivedEvaluationCount: receivedEvaluationRows.length,
       expectedEvaluationCount,
-      finalMeanReady: allEvaluatorsComplete,
+      finalMeanReady: allEvaluatorsComplete && finalScore !== null,
       evaluations: receivedEvaluationRows.map(({ assignment, score }) => ({
         assignmentId: assignment.id,
         evaluator: names.get(assignment.evaluator_id) || "StudyPact participant",
-        score: Number(score!.score),
+        score: score!.score === null ? null : Number(score!.score),
         rubricScores: score!.rubric_scores,
         comments: score!.comments,
         submittedAt: score!.submitted_at,
@@ -1290,7 +1291,7 @@ export const getPeerEvaluationAssignment = async (
     negativeMarks: Math.abs(getEvaluationQuestionMinimum(question, paper)),
     rubric: question.rubric ?? [],
   }));
-  if (!questions.length || questions.some((question) => !Number.isFinite(question.maxMarks) || question.maxMarks < 0)) {
+  if (questions.some((question) => !Number.isFinite(question.maxMarks) || question.maxMarks < 0)) {
     throw new Error("This paper does not have a usable evaluation rubric.");
   }
 
@@ -1410,6 +1411,9 @@ export const savePeerEvaluationDraft = async (
     totalScore += score;
     return { questionId, score, maxMarks };
   });
+  if (questions.size === 0 && rubricScores.length > 0) {
+    throw new Error("This custom paper accepts written feedback without scores.");
+  }
   const maximumScore = [...questions.values()].reduce(
     (sum, question) => sum + getEvaluationQuestionMaximum(question, paper),
     0,
@@ -1433,13 +1437,13 @@ export const savePeerEvaluationDraft = async (
   const query = existing
     ? supabaseAdmin
         .from("evaluator_scores")
-        .update({ score: totalScore, rubric_scores: normalizedScores, comments })
+    .update({ score: questions.size ? totalScore : null, rubric_scores: normalizedScores, comments })
         .eq("id", existing.id)
     : supabaseAdmin
         .from("evaluator_scores")
         .insert({
           assignment_id: assignmentId,
-          score: totalScore,
+          score: questions.size ? totalScore : null,
           rubric_scores: normalizedScores,
           comments,
         });
@@ -1526,6 +1530,9 @@ export const submitPeerEvaluation = async (
   if (comments.length > 5000) {
     throw new Error("Evaluation comments cannot exceed 5000 characters.");
   }
+  if (questions.size === 0 && !comments.trim()) {
+    throw new Error("Write feedback before submitting this custom-paper evaluation.");
+  }
 
   const { data: completedAssignment, error: completeError } = await supabaseAdmin
     .from("evaluator_assignments")
@@ -1548,7 +1555,7 @@ export const submitPeerEvaluation = async (
   let score: {
     id: string;
     assignment_id: string;
-    score: number;
+    score: number | null;
     rubric_scores: unknown;
     comments: string | null;
     submitted_at: string;
@@ -1558,7 +1565,7 @@ export const submitPeerEvaluation = async (
     const result = await supabaseAdmin
       .from("evaluator_scores")
       .update({
-        score: totalScore,
+        score: questions.size ? totalScore : null,
         rubric_scores: normalizedScores,
         comments,
         submitted_at: new Date().toISOString(),
@@ -1573,7 +1580,7 @@ export const submitPeerEvaluation = async (
       .from("evaluator_scores")
       .insert({
         assignment_id: assignmentId,
-        score: totalScore,
+        score: questions.size ? totalScore : null,
         rubric_scores: normalizedScores,
         comments,
       })
@@ -1595,7 +1602,7 @@ export const submitPeerEvaluation = async (
   return {
     id: score.id,
     assignmentId: score.assignment_id,
-    score: Number(score.score),
+    score: score.score === null ? null : Number(score.score),
     rubricScores: score.rubric_scores,
     comments: score.comments,
     submittedAt: score.submitted_at,

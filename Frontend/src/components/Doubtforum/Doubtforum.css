@@ -283,6 +283,12 @@
     box-shadow: 0 1px 3px rgba(20, 23, 21, 0.02);
 }
 
+.df-thread-focused {
+    border-color: #ba4a2b;
+    box-shadow: 0 0 0 3px rgba(186, 74, 43, 0.13);
+    scroll-margin: 24px;
+}
+
 .df-thread-header {
     display: flex;
     align-items: center;

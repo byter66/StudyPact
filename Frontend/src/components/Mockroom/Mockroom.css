@@ -359,6 +359,20 @@
   gap: 24px;
 }
 
+.mr-paper-panel {
+  min-width: 0;
+}
+
+.mr-question-paper-pdf {
+  display: block;
+  width: 100%;
+  height: min(78vh, 1100px);
+  min-height: 620px;
+  border: 0;
+  border-radius: 4px;
+  background: #f3f1ed;
+}
+
 .mr-draft-notice {
   background: var(--bg-surface-warm, #F7F5F0);
   border: 1px dashed var(--border-hairline, #E6E1D6);
@@ -709,6 +723,13 @@
   }
   .mr-timer-panel {
     position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .mr-question-paper-pdf {
+    height: 72vh;
+    min-height: 480px;
   }
 }
 

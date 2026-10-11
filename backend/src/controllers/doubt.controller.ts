@@ -197,6 +197,7 @@ export const postDoubtReply = async (
   const userId = req.user?.id;
   const content =
     typeof req.body?.content === "string" ? req.body.content.trim() : "";
+  const requestId = req.body?.requestId;
 
   if (!isValidUuid(roomId) || !isValidUuid(doubtId)) {
     res.status(400).json({ success: false, message: "Invalid room or doubt ID" });
@@ -219,6 +220,11 @@ export const postDoubtReply = async (
     return;
   }
 
+  if (requestId !== undefined && !isValidUuid(requestId)) {
+    res.status(400).json({ success: false, message: "requestId must be a valid UUID." });
+    return;
+  }
+
   if (!(await isRoomMember(roomId, userId))) {
     res.status(403).json({
       success: false,
@@ -227,7 +233,7 @@ export const postDoubtReply = async (
     return;
   }
 
-  const reply = await createDoubtReply(roomId, doubtId, userId, content);
+  const reply = await createDoubtReply(roomId, doubtId, userId, content, requestId);
   if (!reply) {
     res.status(404).json({
       success: false,
