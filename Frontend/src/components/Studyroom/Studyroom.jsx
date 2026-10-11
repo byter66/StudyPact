@@ -100,6 +100,7 @@ const StudyRoom = () => {
     myStatusRef.current = myStatus;
     const chatMessagesRef = useRef(null);
     const chatWasNearBottomRef = useRef(true);
+    const [isChatOpen, setIsChatOpen] = useState(false);
 
     useEffect(() => {
         const loadAvailablePapers = async () => {
@@ -177,9 +178,10 @@ const StudyRoom = () => {
         let reconnectAttempts = 0;
         let reconnecting = false;
 
-        const setupSubscription = () => {
-            if (!isCurrent || !supabase || !userId || !roomId) return;
+        const syncPresence = () => {
+            if (!isCurrent) return;
 
+            const activeMembers = new Map();
             if (channel) {
                 Object.values(channel.presenceState()).flat().forEach((presence) => {
                     if (!presence.user_id || activeMembers.has(presence.user_id)) return;
@@ -1030,15 +1032,21 @@ const StudyRoom = () => {
                             chatWasNearBottomRef.current = distanceFromBottom <= 100;
                         }}
                     >
-                        {messages.map((m) => (
-                            <div
-                                key={m.id}
-                                className={`sr-chat-message ${m.author === 'You' ? 'sr-chat-mine' : ''}`}
-                            >
-                                <span className="sr-chat-author">{m.author}</span>
-                                <span className="sr-chat-text">{m.text}</span>
+                        {messages.length === 0 ? (
+                            <div style={{ color: '#8a8474', fontSize: '12px', textAlign: 'center', margin: 'auto 0' }}>
+                                Say hello to your study partners!
                             </div>
-                        ))}
+                        ) : (
+                            messages.map((m) => (
+                                <div
+                                    key={m.id}
+                                    className={`sr-chat-message ${m.author === 'You' ? 'sr-chat-mine' : ''}`}
+                                >
+                                    <span className="sr-chat-author">{m.author}</span>
+                                    <span className="sr-chat-text">{m.text}</span>
+                                </div>
+                            ))
+                        )}
                     </div>
                     <form className="sr-chat-form" onSubmit={sendMessage}>
                         <input
@@ -1047,63 +1055,19 @@ const StudyRoom = () => {
                             onChange={(e) => setDraft(e.target.value)}
                             placeholder="Message the room..."
                             className="sr-chat-input"
+                            maxLength={500}
                         />
-                        <button type="submit" className="sr-chat-send">Send</button>
+                        <button
+                            type="submit"
+                            className="sr-chat-send"
+                            disabled={!draft.trim()}
+                            aria-label="Send message"
+                        >
+                            Send
+                        </button>
                     </form>
                 </div>
             )}
-                    <div className="sr-chat">
-                        <p className="sr-panel-label">ROOM CHAT</p>
-                        <div
-                            ref={chatMessagesRef}
-                            className="sr-chat-messages"
-                            onScroll={(event) => {
-                                const element = event.currentTarget;
-                                const distanceFromBottom =
-                                    element.scrollHeight
-                                    - element.scrollTop
-                                    - element.clientHeight;
-                                chatWasNearBottomRef.current = distanceFromBottom <= 100;
-                            }}
-                        >
-                            {messages.length === 0 ? (
-                                <div style={{ color: '#8a8474', fontSize: '12px', textAlign: 'center', margin: 'auto 0' }}>
-                                    Say hello to your study partners!
-                                </div>
-                            ) : (
-                                messages.map((m) => (
-                                    <div
-                                        key={m.id}
-                                        className={`sr-chat-message ${m.author === 'You' ? 'sr-chat-mine' : ''}`}
-                                    >
-                                        <span className="sr-chat-author">{m.author}</span>
-                                        <span className="sr-chat-text">{m.text}</span>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-
-                        <form className="sr-chat-form" onSubmit={sendMessage}>
-                            <input
-                                type="text"
-                                value={draft}
-                                onChange={(e) => setDraft(e.target.value)}
-                                placeholder="Message the room..."
-                                className="sr-chat-input"
-                                maxLength={500}
-                            />
-                            <button
-                                type="submit"
-                                className="sr-chat-send"
-                                disabled={!draft.trim()}
-                                aria-label="Send message"
-                            >
-                                Send
-                            </button>
-                        </form>
-                    </div>
-                </aside>
-            </div>
 
             {showPaperSelector && (
                 <div className="sr-modal-overlay" onClick={() => !creatingMockSession && setShowPaperSelector(false)}>
