@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BookOpen, ArrowLeft, ArrowRight, ShieldCheck, Flame, Radio } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Signin.css';
 import { authService } from '../../services/authService';
@@ -62,90 +63,208 @@ const Signin = () => {
     };
 
     return (
-        <section className="signin-section">
-
-            <div className="signin-photo">
-                <div className="signin-photo-top">
-                    <div className="brand-badge">
-                        <span className='brand-icon'>📋</span>
-                        <span className='brand-name'>StudyPact</span>
+        <div className="auth-page">
+            {/* Architectural Top Masthead */}
+            <header className="auth-masthead">
+                <div className="auth-masthead-inner">
+                    <div className="auth-brand">
+                        <Link to="/" className="auth-brand-link">
+                            <span className="auth-brand-symbol">
+                                <BookOpen size={16} />
+                            </span>
+                            <span className="auth-brand-name">StudyPact</span>
+                        </Link>
+                        <span className="auth-edition-tag">EST. 2026 // ACADEMIC COHORT</span>
                     </div>
 
-                    <div className="signin-photo-content">
-                        <h1 className="signin-headline">Welcome back. Your<br />pact is waiting.</h1>
-                        <p className="signin-subtext">Sign in to check today's goals and keep your streak going.</p>
+                    <div className="auth-masthead-meta">
+                        <div className="auth-pulse-badge">
+                            <span className="pulse-dot"></span>
+                            <span className="pulse-text">1,420 Aspirants in Live Rooms</span>
+                        </div>
+                        <Link to="/" className="auth-nav-link auth-nav-home" title="Return to Home">
+                            <ArrowLeft size={13} />
+                            <span>Home</span>
+                        </Link>
                     </div>
                 </div>
+            </header>
 
-                <div className="signin-photo-bottom">
-                    <div className="signin-stats">
-                        <div className="stat">
-                            <span className="stat-number">12K+</span>
-                            <span className="stat-label">Active aspirants</span>
+            {/* Asymmetrical Editorial Body */}
+            <main className="auth-main-container">
+                <div className="auth-grid-frame">
+                    
+                    {/* Left Editorial Section: The Focus Ledger */}
+                    <section className="auth-editorial-pane">
+                        <div className="editorial-content-stack">
+                            <div className="editorial-tag-row">
+                                <span className="editorial-tag">PORTAL 01</span>
+                                <span className="editorial-divider">/</span>
+                                <span className="editorial-category">STUDENT ACCESS TERMINAL</span>
+                            </div>
+
+                            <h1 className="editorial-headline">
+                                Focus is not found.<br />
+                                <span className="headline-italic">It is contracted.</span>
+                            </h1>
+
+                            <p className="editorial-summary">
+                                StudyPact pairs dedicated aspirants in synchronized study rooms with peer-evaluated mock papers. Sign in to uphold your daily pact.
+                            </p>
+
+                            {/* Active Peer Rooms Ledger */}
+                            <div className="peer-ledger-card">
+                                <div className="ledger-card-header">
+                                    <div className="ledger-title-wrap">
+                                        <Radio size={12} className="ledger-live-icon" />
+                                        <span className="ledger-title">LIVE STUDY ROOMS PULSE</span>
+                                    </div>
+                                    <span className="ledger-sync-tag">REALTIME</span>
+                                </div>
+
+                                <div className="ledger-rooms-list">
+                                    <div className="ledger-room-row">
+                                        <div className="room-meta">
+                                            <span className="room-index">01</span>
+                                            <div className="room-info">
+                                                <span className="room-title">UPSC General Studies</span>
+                                                <span className="room-mode">Pomodoro Round 3 of 4</span>
+                                            </div>
+                                        </div>
+                                        <span className="room-badge">32 Active</span>
+                                    </div>
+
+                                    <div className="ledger-room-row">
+                                        <div className="room-meta">
+                                            <span className="room-index">02</span>
+                                            <div className="room-info">
+                                                <span className="room-title">GATE CS & Algorithms</span>
+                                                <span className="room-mode">Deep Focus Sprint</span>
+                                            </div>
+                                        </div>
+                                        <span className="room-badge">24 Active</span>
+                                    </div>
+
+                                    <div className="ledger-room-row">
+                                        <div className="room-meta">
+                                            <span className="room-index">03</span>
+                                            <div className="room-info">
+                                                <span className="room-title">CAT Quantitative Prep</span>
+                                                <span className="room-mode">Peer Mock Evaluation</span>
+                                            </div>
+                                        </div>
+                                        <span className="room-badge">19 Active</span>
+                                    </div>
+                                </div>
+
+                                <div className="ledger-footer-note">
+                                    <Flame size={13} className="streak-icon" />
+                                    <span>Average daily focus among pact holders: <strong>5.4 hours</strong></span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="stat">
-                            <span className="stat-number">98%</span>
-                            <span className="stat-label">Goal completion</span>
-                        </div>
-                    </div>
-                </div>
+                    </section>
 
-            </div>
+                    {/* Right Lightweight Form Pane */}
+                    <section className="auth-terminal-pane">
+                        <div className="auth-terminal-inner">
+                            <div className="terminal-header">
+                                <span className="terminal-eyebrow">MEMBER AUTHENTICATION</span>
+                                <h2 className="terminal-title">Sign In</h2>
+                                <p className="terminal-subtitle">
+                                    Enter your registered phone number to receive a secure session code.
+                                </p>
+                            </div>
 
-            <div className="signin-form-panel">
-                <button className="menu-dots" aria-label="More options">•••</button>
+                            <form className="terminal-form" onSubmit={otpSent ? handleVerifyOtp : handleRequestOtp}>
+                                <div className="terminal-field-group">
+                                    <label className="terminal-label" htmlFor="phone">
+                                        Mobile Number
+                                    </label>
+                                    <div className="phone-input-composite">
+                                        <span className="phone-prefix">+91</span>
+                                        <input
+                                            id="phone"
+                                            type="tel"
+                                            value={phone}
+                                            onChange={(event) => setPhone(normalizePhone(event.target.value))}
+                                            className="terminal-input phone-input"
+                                            placeholder="Enter 10-digit number"
+                                            inputMode="numeric"
+                                            maxLength={10}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <span className="terminal-field-caption">
+                                        Verification code will be delivered via SMS
+                                    </span>
+                                </div>
 
-                <div className="signin-form-wrapper">
-                    <h2 className="form-title">Sign in</h2>
-                    <p className="form-subtitle">Enter your phone number to receive an OTP.</p>
-
-                    <form className="signin-form" onSubmit={otpSent ? handleVerifyOtp : handleRequestOtp}>
-                        <label className="field-label" htmlFor="phone">Phone no.</label>
-                        <input
-                            id="phone"
-                            type="tel"
-                            value={phone}
-                            onChange={(event) => setPhone(normalizePhone(event.target.value))}
-                            className="field-input"
-                            inputMode="numeric"
-                            maxLength={10}
-                        />
-
-                        {otpSent && (
-                            <>
-                                {generatedOtp && (
-                                    <p className="dev-otp-notice">
-                                        Your OTP is <strong>{generatedOtp}</strong>
-                                    </p>
+                                {otpSent && (
+                                    <div className="terminal-field-group otp-reveal-group">
+                                        {generatedOtp && (
+                                            <div className="dev-otp-capsule">
+                                                <span className="capsule-label">DEMO SESSION CODE:</span>
+                                                <strong className="capsule-code">{generatedOtp}</strong>
+                                            </div>
+                                        )}
+                                        <label className="terminal-label" htmlFor="otp">
+                                            One-Time Passcode
+                                        </label>
+                                        <input
+                                            id="otp"
+                                            type="text"
+                                            value={otp}
+                                            onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                                            className="terminal-input otp-code-input"
+                                            placeholder="• • • • • •"
+                                            inputMode="numeric"
+                                            maxLength={6}
+                                            autoFocus
+                                        />
+                                        <span className="terminal-field-caption">
+                                            Enter the 6-digit code received
+                                        </span>
+                                    </div>
                                 )}
-                                <label className="field-label" htmlFor="otp">OTP</label>
-                                <input
-                                    id="otp"
-                                    type="text"
-                                    value={otp}
-                                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    className="field-input"
-                                    inputMode="numeric"
-                                    maxLength={6}
-                                />
-                            </>
-                        )}
 
-                        {error && <p className="auth-error">{error}</p>}
+                                {error && (
+                                    <div className="terminal-error-notice" role="alert">
+                                        <span className="error-bullet">●</span>
+                                        <span className="error-text">{error}</span>
+                                    </div>
+                                )}
 
-                        <button type="submit" className="btn btn-primary" disabled={loading}>
-                            {loading ? 'Please wait...' : otpSent ? 'Verify OTP' : 'Send OTP'}
-                        </button>
-                    </form>
+                                <button
+                                    type="submit"
+                                    className="terminal-primary-btn"
+                                    disabled={loading}
+                                >
+                                    <span>{loading ? 'Please wait...' : otpSent ? 'Verify Code & Enter Dashboard' : 'Send Verification OTP'}</span>
+                                    <ArrowRight size={15} />
+                                </button>
+                            </form>
 
-                    <p className="signup-prompt">
-                        New here? <Link to="/signup" className="signup-link">Create an account</Link>
-                    </p>
+                            <div className="terminal-footer">
+                                <div className="auth-switch-prompt">
+                                    <span>New to StudyPact?</span>
+                                    <Link to="/signup" className="auth-switch-link">
+                                        Create an account <ArrowRight size={12} className="switch-arrow" />
+                                    </Link>
+                                </div>
+
+                                <div className="auth-security-badge">
+                                    <ShieldCheck size={13} />
+                                    <span>Encrypted session protocol • Zero spam</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                 </div>
-            </div>
-
-        </section>
-    )
-}
+            </main>
+        </div>
+    );
+};
 
 export default Signin;

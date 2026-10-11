@@ -20,7 +20,8 @@ import {
 import { completeDailyGoal, getTodayDailyGoals } from '../../services/dailyGoalService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import './StudyRoom.css';
+import { X, Check, FileText, ArrowRight, HelpCircle } from 'lucide-react';
+import './Studyroom.css';
 
 const STATUS_LABEL = {
     studying: 'Studying',
@@ -30,8 +31,7 @@ const STATUS_LABEL = {
 
 const STATUS_CYCLE = ['studying', 'break', 'away'];
 
-const DEFAULT_FOCUS_MINUTES = 20;
-const BREAK_MINUTES = 5;
+const FOCUS_MINUTES = 25;
 
 const createMessageId = () => (
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -52,6 +52,14 @@ const StudyRoom = () => {
     const [realtimeError, setRealtimeError] = useState('');
     const [memberError, setMemberError] = useState('');
     const [leaving, setLeaving] = useState(false);
+    const [copiedCode, setCopiedCode] = useState(false);
+
+    const handleCopyCode = () => {
+        if (!room?.roomCode) return;
+        navigator.clipboard?.writeText(room.roomCode);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
+    };
     const [dailyGoals, setDailyGoals] = useState([]);
     const [dailyGoalsLoading, setDailyGoalsLoading] = useState(true);
     const [dailyGoalsError, setDailyGoalsError] = useState('');
@@ -67,13 +75,12 @@ const StudyRoom = () => {
     const [creatingMockSession, setCreatingMockSession] = useState(false);
     const [paperSource, setPaperSource] = useState('dataset');
     const [paperSearch, setPaperSearch] = useState('');
-    const [examDurationMinutes, setExamDurationMinutes] = useState('');
+    const [examDurationMinutes, setExamDurationMinutes] = useState('60');
+    const [durationOption, setDurationOption] = useState('60');
     const [customQuestionPaper, setCustomQuestionPaper] = useState(null);
-    const [focusMinutes, setFocusMinutes] = useState(DEFAULT_FOCUS_MINUTES);
-    const [timerPhase, setTimerPhase] = useState('focus');
 
     const [myStatus, setMyStatus] = useState('studying');
-    const [secondsLeft, setSecondsLeft] = useState(DEFAULT_FOCUS_MINUTES * 60);
+    const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
     const [isRunning, setIsRunning] = useState(false);
     const [messages, setMessages] = useState([]);
     const [draft, setDraft] = useState('');
@@ -92,7 +99,6 @@ const StudyRoom = () => {
     myStatusRef.current = myStatus;
     const chatMessagesRef = useRef(null);
     const chatWasNearBottomRef = useRef(true);
-    const [isChatOpen, setIsChatOpen] = useState(false);
 
     useEffect(() => {
         const loadAvailablePapers = async () => {
@@ -164,11 +170,109 @@ const StudyRoom = () => {
     useEffect(() => {
         let isCurrent = true;
         let channel = null;
-        let roomMembers = [];
-        let memberRequestId = 0;
         let reconnectTimer = null;
         let reconnectAttempts = 0;
-        let reconnecting = false;
+        const MAX_RECONNECT_ATTEMPTS = 5;
+        let roomMembers = [];
+        let memberRequestId = 0;
+
+        const setupSubscription = () => {
+            if (!isCurrent || !supabase || !userId || !roomId) return;
+
+            if (channel) {
+                presenceSubscribedRef.current = false;
+                try {
+                    supabase.removeChannel(channel);
+                } catch {
+                    // Safe cleanup
+                }
+                channel = null;
+            }
+
+            channel = supabase.channel(`room-presence:${roomId}`, {
+                config: { presence: { key: userId } },
+            });
+            presenceChannelRef.current = channel;
+            presenceSubscribedRef.current = false;
+
+            channel
+                .on('presence', { event: 'sync' }, handlePresenceChange)
+                .on('presence', { event: 'join' }, handlePresenceChange)
+                .on('presence', { event: 'leave' }, handlePresenceChange)
+                .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
+                    if (
+                        !isCurrent ||
+                        !payload?.id ||
+                        !payload.user_id ||
+                        !payload.text
+                    ) {
+                        return;
+                    }
+
+                    setMessages((previousMessages) => {
+                        if (previousMessages.some((message) => message.id === payload.id)) {
+                            return previousMessages;
+                        }
+
+                        return [
+                            ...previousMessages,
+                            {
+                                id: payload.id,
+                                author: payload.user_id === userId
+                                    ? 'You'
+                                    : payload.display_name || 'StudyPact member',
+                                text: payload.text,
+                            },
+                        ];
+                    });
+                });
+
+            channel.subscribe(async (status) => {
+                if (!isCurrent) return;
+
+                if (status === 'SUBSCRIBED') {
+                    reconnectAttempts = 0;
+                    setRealtimeError('');
+                    presenceSubscribedRef.current = true;
+                    try {
+                        const { error } = await channel.track({
+                            user_id: userId,
+                            display_name: presenceDisplayName,
+                            status: myStatusRef.current,
+                        });
+                        if (!isCurrent) return;
+                        if (error) {
+                            setRealtimeError('Unable to announce your presence. Please retry.');
+                        } else {
+                            syncPresence();
+                        }
+                    } catch {
+                        // Ignore transient presence track error
+                    }
+                } else if (
+                    status === 'CHANNEL_ERROR' ||
+                    status === 'TIMED_OUT' ||
+                    status === 'CLOSED'
+                ) {
+                    presenceSubscribedRef.current = false;
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        reconnectAttempts += 1;
+                        const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 8000);
+                        if (reconnectTimer) clearTimeout(reconnectTimer);
+                        reconnectTimer = setTimeout(() => {
+                            if (!isCurrent) return;
+                            setupSubscription();
+                        }, backoffDelay);
+                    } else {
+                        setRealtimeError(
+                            status === 'CLOSED'
+                                ? 'Realtime channel closed. Re-enter the room to reconnect.'
+                                : `Realtime connection ${status.toLowerCase().replace('_', ' ')}. Waiting for automatic retry.`
+                        );
+                    }
+                }
+            });
+        };
 
         const syncPresence = () => {
             if (!isCurrent) return;
@@ -250,89 +354,7 @@ const StudyRoom = () => {
                     return;
                 }
 
-                const subscribeToRoom = () => {
-                    if (!isCurrent || reconnecting) return;
-                    reconnecting = true;
-                    channel = supabase.channel(`room-presence:${roomId}`, {
-                        config: { presence: { key: userId } },
-                    });
-                    presenceChannelRef.current = channel;
-                    presenceSubscribedRef.current = false;
-
-                    channel
-                        .on('presence', { event: 'sync' }, handlePresenceChange)
-                        .on('presence', { event: 'join' }, handlePresenceChange)
-                        .on('presence', { event: 'leave' }, handlePresenceChange)
-                        .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
-                        if (
-                            !isCurrent ||
-                            !payload?.id ||
-                            !payload.user_id ||
-                            !payload.text
-                        ) {
-                            return;
-                        }
-
-                        setMessages((previousMessages) => {
-                            if (previousMessages.some((message) => message.id === payload.id)) {
-                                return previousMessages;
-                            }
-
-                            return [
-                                ...previousMessages,
-                                {
-                                    id: payload.id,
-                                    author: payload.user_id === userId
-                                        ? 'You'
-                                        : payload.display_name || 'StudyPact member',
-                                    text: payload.text,
-                                },
-                            ];
-                        });
-                        });
-
-                    channel.subscribe(async (status) => {
-                        if (!isCurrent) return;
-
-                        if (status === 'SUBSCRIBED') {
-                            reconnectAttempts = 0;
-                            reconnecting = false;
-                            setRealtimeError('');
-                            presenceSubscribedRef.current = true;
-                            const { error } = await channel.track({
-                                user_id: userId,
-                                display_name: presenceDisplayName,
-                                status: myStatusRef.current,
-                            });
-                            if (!isCurrent) return;
-                            if (error) {
-                                setRealtimeError('Unable to announce your presence. Please retry.');
-                            } else {
-                                syncPresence();
-                                void refreshMembers();
-                            }
-                        } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
-                            presenceSubscribedRef.current = false;
-                            reconnecting = false;
-                            if (reconnectAttempts >= 3 || reconnectTimer) {
-                                setRealtimeError('Realtime connection could not be restored. Please re-enter the room.');
-                                return;
-                            }
-                            reconnectAttempts += 1;
-                            setRealtimeError(`Realtime connection ${status.toLowerCase().replace('_', ' ')}. Reconnecting...`);
-                            const failedChannel = channel;
-                            reconnectTimer = window.setTimeout(async () => {
-                                reconnectTimer = null;
-                                if (!isCurrent) return;
-                                await supabase.removeChannel(failedChannel);
-                                if (channel === failedChannel) channel = null;
-                                subscribeToRoom();
-                            }, reconnectAttempts * 1000);
-                        }
-                    });
-                };
-
-                subscribeToRoom();
+                setupSubscription();
             } catch (error) {
                 if (isCurrent) {
                     setRoomError(error.message || 'Unable to load this room.');
@@ -353,7 +375,7 @@ const StudyRoom = () => {
 
         return () => {
             isCurrent = false;
-            if (reconnectTimer) window.clearTimeout(reconnectTimer);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
             presenceSubscribedRef.current = false;
             presenceChannelRef.current = null;
             if (channel) {
@@ -458,32 +480,21 @@ const StudyRoom = () => {
             : 0;
 
         return Math.min(
-            focusMinutes * 60,
+            FOCUS_MINUTES * 60,
             accumulatedFocusedSecondsRef.current + runningSeconds,
         );
     };
 
     useEffect(() => {
-        if (!isRunning || (timerPhase === 'focus' && !startedAtRef.current)) {
+        if (!isRunning || !startedAtRef.current) {
             return undefined;
         }
 
         const updateCountdown = () => {
-            if (timerPhase === 'break') {
-                const remainingBreak = Math.max(0, secondsLeft - 1);
-                setSecondsLeft(remainingBreak);
-                if (remainingBreak === 0) {
-                    setTimerPhase('focus');
-                    setSecondsLeft(focusMinutes * 60);
-                    setIsRunning(false);
-                    startedAtRef.current = null;
-                }
-                return;
-            }
             const elapsedSeconds = getFocusedDuration();
             const remainingSeconds = Math.max(
                 0,
-                focusMinutes * 60 - elapsedSeconds,
+                FOCUS_MINUTES * 60 - elapsedSeconds,
             );
 
             setSecondsLeft(remainingSeconds);
@@ -491,9 +502,7 @@ const StudyRoom = () => {
             if (remainingSeconds === 0) {
                 clearInterval(intervalRef.current);
                 startedAtRef.current = null;
-                setTimerPhase('break');
-                setSecondsLeft(BREAK_MINUTES * 60);
-                setIsRunning(true);
+                setIsRunning(false);
 
                 const currentSessionId = sessionIdRef.current;
                 if (
@@ -505,7 +514,7 @@ const StudyRoom = () => {
                     operationInProgressRef.current = true;
                     completePomodoroSession(
                         currentSessionId,
-                        focusMinutes * 60,
+                        FOCUS_MINUTES * 60,
                     )
                         .then(() => {
                             setSessionStatus('completed');
@@ -525,7 +534,7 @@ const StudyRoom = () => {
         intervalRef.current = setInterval(updateCountdown, 1000);
 
         return () => clearInterval(intervalRef.current);
-    }, [focusMinutes, isRunning, secondsLeft, timerPhase]);
+    }, [isRunning]);
 
     const formatTime = (secs) => {
         const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -546,14 +555,10 @@ const StudyRoom = () => {
 
         try {
             if (isRunning) {
-                if (timerPhase === 'break') {
-                    setIsRunning(false);
-                    return;
-                }
                 const currentFocusedDuration = getFocusedDuration();
                 setIsRunning(false);
                 startedAtRef.current = null;
-                setSecondsLeft(focusMinutes * 60 - currentFocusedDuration);
+                setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
                 setSessionStatus('paused');
 
                 await updatePomodoroSession(sessionIdRef.current, {
@@ -567,11 +572,6 @@ const StudyRoom = () => {
 
             let currentSessionId = sessionIdRef.current;
             let currentFocusedDuration = accumulatedFocusedSecondsRef.current;
-            if (timerPhase === 'break') {
-                startedAtRef.current = Date.now();
-                setIsRunning(true);
-                return;
-            }
 
             if (sessionStatus === 'paused' && currentSessionId) {
                 await updatePomodoroSession(currentSessionId, {
@@ -581,7 +581,7 @@ const StudyRoom = () => {
             } else {
                 const session = await createPomodoroSession(
                     roomId,
-                    focusMinutes * 60,
+                    FOCUS_MINUTES * 60,
                 );
                 currentSessionId = session.id;
                 setSessionId(currentSessionId);
@@ -593,7 +593,7 @@ const StudyRoom = () => {
 
             startedAtRef.current = Date.now();
             accumulatedFocusedSecondsRef.current = currentFocusedDuration;
-            setSecondsLeft(focusMinutes * 60 - currentFocusedDuration);
+            setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
             setSessionStatus('active');
             setIsRunning(true);
         } catch (error) {
@@ -627,8 +627,7 @@ const StudyRoom = () => {
             setSessionStatus(null);
             accumulatedFocusedSecondsRef.current = 0;
             completionAttemptedRef.current = false;
-            setTimerPhase('focus');
-            setSecondsLeft(focusMinutes * 60);
+            setSecondsLeft(FOCUS_MINUTES * 60);
         } catch (error) {
             setPomodoroError(error.message);
         } finally {
@@ -640,7 +639,7 @@ const StudyRoom = () => {
         if (!roomId) return;
         const duration = Number(examDurationMinutes);
         if (!Number.isInteger(duration) || duration < 1 || duration > 1440) {
-            setPaperSelectionError('Enter an exam duration between 1 minute and 24 hours.');
+            setPaperSelectionError('Please choose a valid exam duration between 1 minute and 24 hours (1440 minutes).');
             return;
         }
         if (paperSource === 'dataset' && !selectedPaperId) {
@@ -752,11 +751,12 @@ const StudyRoom = () => {
     };
 
     const completedGoals = dailyGoals.filter((goal) => goal.isCompleted).length;
-    const progressPercent = (focusMinutes * 60 - secondsLeft) / (focusMinutes * 60) * 100;
+    const progressPercent = (FOCUS_MINUTES * 60 - secondsLeft) / (FOCUS_MINUTES * 60) * 100;
 
     if (roomLoading) {
         return (
-            <div className="sr-page">
+            <div className="sr-page sr-page-loading">
+                <div className="sr-loading-spinner"></div>
                 <p role="status">Loading room...</p>
             </div>
         );
@@ -764,30 +764,44 @@ const StudyRoom = () => {
 
     if (roomError || !room) {
         return (
-            <div className="sr-page">
-                <p role="alert">{roomError || 'Room not found.'}</p>
-                <Link to="/dashboard" className="sr-link-btn">Back to dashboard</Link>
+            <div className="sr-page sr-page-loading">
+                <div className="sr-error-card">
+                    <p role="alert">{roomError || 'Room not found.'}</p>
+                    <Link to="/dashboard" className="sr-btn sr-btn-outline" style={{ textDecoration: 'none' }}>
+                        Back to dashboard
+                    </Link>
+                </div>
             </div>
         );
     }
 
     return (
         <div className="sr-page">
-
             {/* Top bar */}
             <header className="sr-topbar">
                 <div className="sr-room-info">
-                    <span className="sr-badge">{room.examTag}</span>
+                    <span className="sr-badge">{room.examTag || 'Study'}</span>
                     <h1 className="sr-room-title">{room.title}</h1>
-                    <span className="sr-room-code">Code: {room.roomCode}</span>
+                    <span
+                        className="sr-room-code"
+                        onClick={handleCopyCode}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to copy room code"
+                    >
+                        Code: {room.roomCode} {copiedCode && <span style={{ color: '#5c8a52', fontWeight: 600 }}> (Copied!)</span>}
+                    </span>
                     {room.isLive && (
-                        <>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                             <span className="sr-live-dot" aria-hidden="true"></span>
                             <span className="sr-live-text">Live</span>
-                        </>
+                        </span>
                     )}
                 </div>
-                <div className="sr-topbar-actions">
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Link to="/dashboard" className="sr-link-btn" style={{ textDecoration: 'none' }}>
+                        Dashboard
+                    </Link>
                     <button
                         type="button"
                         className="sr-link-btn"
@@ -799,39 +813,45 @@ const StudyRoom = () => {
                 </div>
             </header>
 
+            {/* Body grid */}
             <div className="sr-body">
-
-                {/* Left: presence panel */}
+                {/* Left: presence + active mock rooms */}
                 <aside className="sr-panel sr-presence-panel">
-                    <button className="sr-my-status" onClick={cycleStatus}>
+                    <button
+                        className="sr-my-status"
+                        onClick={cycleStatus}
+                        title="Click to cycle status: Studying / Break / Away"
+                    >
                         <span className={`sr-status-dot sr-status-${myStatus}`}></span>
-                        <span>You — {STATUS_LABEL[myStatus]}</span>
+                        <span>You • {STATUS_LABEL[myStatus]}</span>
                     </button>
 
                     <p className="sr-panel-label">Members ({members.length})</p>
                     {memberError && <p className="sr-realtime-error" role="alert">{memberError}</p>}
                     {realtimeError && <p className="sr-realtime-error" role="alert">{realtimeError}</p>}
                     <ul className="sr-member-list">
-                        {members.map((m) => (
-                            <li key={m.id} className="sr-member">
-                                <span className="sr-avatar">{m.name.charAt(0).toUpperCase()}</span>
-                                <div className="sr-member-meta">
-                                    <span className="sr-member-name">
-                                        {m.name}{m.id === user?.id ? ' (You)' : ''}
-                                    </span>
-                                    <span className="sr-member-status">
-                                        <span className={`sr-status-dot sr-status-${m.status}`}></span>
-                                        {STATUS_LABEL[m.status]}
-                                    </span>
-                                </div>
-                            </li>
-                        ))}
+                        {members.map((m) => {
+                            const isMe = m.id === user?.id;
+                            return (
+                                <li key={m.id} className="sr-member">
+                                    <span className="sr-avatar">{m.name.charAt(0).toUpperCase()}</span>
+                                    <div className="sr-member-meta">
+                                        <span className="sr-member-name">
+                                            {m.name}{isMe ? ' (You)' : ''}
+                                        </span>
+                                        <span className="sr-member-status">
+                                            <span className={`sr-status-dot sr-status-${m.status}`}></span>
+                                            {STATUS_LABEL[m.status]}
+                                        </span>
+                                    </div>
+                                </li>
+                            );
+                        })}
                     </ul>
+
                     <section className="sr-active-mock-rooms" aria-labelledby="sr-active-mock-rooms-title">
                         <h2 className="sr-panel-label" id="sr-active-mock-rooms-title">Active Mock Rooms</h2>
-                        {activeMockRoomsError && (
-                            <p className="sr-mock-rooms-error" role="alert">{activeMockRoomsError}</p>
-                        )}
+                        {activeMockRoomsError && <p className="sr-mock-rooms-error" role="alert">{activeMockRoomsError}</p>}
                         {activeMockRoomsLoading ? (
                             <p className="sr-mock-rooms-empty">Loading mock rooms...</p>
                         ) : activeMockRooms.length === 0 ? (
@@ -843,8 +863,7 @@ const StudyRoom = () => {
                                         <div className="sr-mock-room-details">
                                             <h3>{mockRoom.paper.title}</h3>
                                             <p>Created by: {mockRoom.creator.name}</p>
-                                            <p>Paper: {mockRoom.paper.name}</p>
-                                            <p>Status: Waiting to start</p>
+                                            <p>Status: Ready to start</p>
                                         </div>
                                         <button
                                             type="button"
@@ -868,43 +887,35 @@ const StudyRoom = () => {
                             <circle className="sr-ring-bg" cx="60" cy="60" r="52" />
                             <circle
                                 className="sr-ring-progress"
-                                cx="60" cy="60" r="52"
+                                cx="60"
+                                cy="60"
+                                r="52"
                                 style={{ strokeDashoffset: 327 - (327 * progressPercent) / 100 }}
                             />
                         </svg>
                         <div className="sr-timer-center">
                             <span className="sr-timer-value">{formatTime(secondsLeft)}</span>
-                            <span className="sr-timer-caption">{timerPhase === 'break' ? 'Break' : 'Focus session'}</span>
+                            <span className="sr-timer-caption">Focus session</span>
                         </div>
                     </div>
 
                     <div className="sr-timer-controls">
-                        <label className="sr-focus-duration">
-                            Focus
-                            <input
-                                type="number"
-                                min="1"
-                                max="120"
-                                step="1"
-                                value={focusMinutes}
-                                onChange={(event) => {
-                                    if (!isRunning && timerPhase === 'focus') {
-                                        setFocusMinutes(Math.max(1, Math.min(120, Number(event.target.value) || DEFAULT_FOCUS_MINUTES)));
-                                        setSecondsLeft(Math.max(1, Math.min(120, Number(event.target.value) || DEFAULT_FOCUS_MINUTES)) * 60);
-                                    }
-                                }}
-                                disabled={isRunning || timerPhase === 'break'}
-                            />
-                            min
-                        </label>
-                        <button className="sr-btn sr-btn-outline" onClick={handleReset}>Reset</button>
                         <button
+                            type="button"
+                            className="sr-btn sr-btn-outline"
+                            onClick={handleReset}
+                        >
+                            Reset
+                        </button>
+                        <button
+                            type="button"
                             className="sr-btn sr-btn-primary"
                             onClick={handleStartPause}
                         >
-                            {isRunning ? 'Pause' : 'Start'}
+                            {isRunning ? 'Pause' : 'Start Focus'}
                         </button>
                     </div>
+
                     {pomodoroError && (
                         <span
                             role="alert"
@@ -928,63 +939,74 @@ const StudyRoom = () => {
                                 setShowPaperSelector(true);
                             }}
                         >
-                            <span className="sr-quick-title">Create Mock Room</span>
-                            <span className="sr-quick-sub">Timed practice + peer review</span>
+                            <div className="sr-quick-content">
+                                <div className="sr-quick-icon-wrap">
+                                    <FileText size={16} className="sr-quick-icon" />
+                                </div>
+                                <div className="sr-quick-text">
+                                    <span className="sr-quick-title">Start a Mock Test</span>
+                                    <span className="sr-quick-sub">Timed exam practice with peer evaluations</span>
+                                </div>
+                            </div>
+                            <div className="sr-quick-action-badge">
+                                <ArrowRight size={13} className="sr-quick-arrow" />
+                            </div>
                         </button>
                     </div>
 
                     <div className="sr-goal-strip">
-                        <span className="sr-goal-strip-label">
-                            My tasks — {completedGoals}/{dailyGoals.length} complete
-                        </span>
+                        <div className="sr-goal-strip-header">
+                            <span className="sr-goal-strip-title">Today's Goals</span>
+                            <span className="sr-goal-strip-count">
+                                {completedGoals}/{dailyGoals.length} completed
+                            </span>
+                        </div>
+
                         {dailyGoalsError && <p className="sr-task-error" role="alert">{dailyGoalsError}</p>}
+
                         <div className="sr-goal-strip-items">
                             {dailyGoalsLoading ? (
-                                <span className="sr-goal-chip">Loading goals...</span>
+                                <span className="sr-goal-chip sr-goal-loading">Loading goals...</span>
                             ) : dailyGoals.length === 0 ? (
-                                <span className="sr-goal-chip">No daily goals set for today.</span>
-                            ) : dailyGoals.map((goal) => (
-                                <label
-                                    key={goal.id}
-                                    className={`sr-goal-chip sr-goal-task ${goal.isCompleted ? 'sr-goal-done' : ''}`}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={goal.isCompleted}
-                                        onChange={() => toggleDailyGoal(goal)}
-                                        disabled={goal.isCompleted}
-                                    />
-                                    {goal.description}
-                                </label>
-                            ))}
+                                <span className="sr-goal-chip sr-goal-empty">No daily goals set for today yet.</span>
+                            ) : (
+                                dailyGoals.map((goal) => (
+                                    <label
+                                        key={goal.id}
+                                        className={`sr-goal-chip sr-goal-task ${goal.isCompleted ? 'sr-goal-done' : ''}`}
+                                    >
+                                        {goal.isCompleted ? (
+                                            <Check size={12} className="sr-goal-check-icon" />
+                                        ) : (
+                                            <input
+                                                type="checkbox"
+                                                checked={false}
+                                                onChange={() => toggleDailyGoal(goal)}
+                                                className="sr-goal-checkbox"
+                                            />
+                                        )}
+                                        <span className="sr-goal-text">{goal.description}</span>
+                                    </label>
+                                ))
+                            )}
                         </div>
                     </div>
                 </main>
 
-                {/* Right: chat + doubt forum */}
+                                {/* Right: Doubt Forum at top, Room Chat directly below */}
                 <aside className="sr-panel sr-side-panel">
-                    <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry sr-floating-forum" aria-label="Open Doubt Forum">
-                        <span className="sr-doubt-icon">💬</span>
+                    <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry">
+                        <span className="sr-doubt-icon" aria-hidden="true">
+                            <HelpCircle size={18} />
+                        </span>
                         <div>
                             <span className="sr-doubt-title">Doubt Forum</span>
-                            <span className="sr-doubt-sub">3 open threads</span>
+                            <span className="sr-doubt-sub">Ask questions & discuss solutions</span>
                         </div>
                     </Link>
 
-                    <button
-                        type="button"
-                        className="sr-chat-toggle"
-                        aria-expanded={isChatOpen}
-                        onClick={() => setIsChatOpen((open) => !open)}
-                    >
-                        <span aria-hidden="true">💬</span>
-                        {isChatOpen ? 'Hide room chat' : 'Open room chat'}
-                    </button>
-                    {isChatOpen && <div className="sr-chat">
-                        <div className="sr-chat-heading">
-                            <p className="sr-panel-label">Room chat</p>
-                            <button type="button" className="sr-chat-close" onClick={() => setIsChatOpen(false)} aria-label="Close room chat">×</button>
-                        </div>
+                    <div className="sr-chat">
+                        <p className="sr-panel-label">ROOM CHAT</p>
                         <div
                             ref={chatMessagesRef}
                             className="sr-chat-messages"
@@ -997,16 +1019,23 @@ const StudyRoom = () => {
                                 chatWasNearBottomRef.current = distanceFromBottom <= 100;
                             }}
                         >
-                            {messages.map((m) => (
-                                <div
-                                    key={m.id}
-                                    className={`sr-chat-message ${m.author === 'You' ? 'sr-chat-mine' : ''}`}
-                                >
-                                    <span className="sr-chat-author">{m.author}</span>
-                                    <span className="sr-chat-text">{m.text}</span>
+                            {messages.length === 0 ? (
+                                <div style={{ color: '#8a8474', fontSize: '12px', textAlign: 'center', margin: 'auto 0' }}>
+                                    Say hello to your study partners!
                                 </div>
-                            ))}
+                            ) : (
+                                messages.map((m) => (
+                                    <div
+                                        key={m.id}
+                                        className={`sr-chat-message ${m.author === 'You' ? 'sr-chat-mine' : ''}`}
+                                    >
+                                        <span className="sr-chat-author">{m.author}</span>
+                                        <span className="sr-chat-text">{m.text}</span>
+                                    </div>
+                                ))
+                            )}
                         </div>
+
                         <form className="sr-chat-form" onSubmit={sendMessage}>
                             <input
                                 type="text"
@@ -1014,97 +1043,86 @@ const StudyRoom = () => {
                                 onChange={(e) => setDraft(e.target.value)}
                                 placeholder="Message the room..."
                                 className="sr-chat-input"
+                                maxLength={500}
                             />
-                            <button type="submit" className="sr-chat-send">Send</button>
+                            <button
+                                type="submit"
+                                className="sr-chat-send"
+                                disabled={!draft.trim()}
+                                aria-label="Send message"
+                            >
+                                Send
+                            </button>
                         </form>
-                    </div>}
+                    </div>
                 </aside>
-
             </div>
 
             {showPaperSelector && (
-                <div
-                    className="sr-modal-backdrop"
-                    onMouseDown={(event) => {
-                        if (event.target === event.currentTarget && !creatingMockSession) {
-                            setShowPaperSelector(false);
-                        }
-                    }}
-                >
+                <div className="sr-modal-overlay" onClick={() => !creatingMockSession && setShowPaperSelector(false)}>
                     <section
                         className="sr-mock-modal"
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="sr-mock-modal-title"
-                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                     >
                         <header className="sr-mock-modal-header">
                             <div>
-                                <p className="sr-modal-eyebrow">Study room mock exam</p>
-                                <h2 id="sr-mock-modal-title">Create Mock Exam</h2>
+                                <span className="sr-modal-eyebrow">PRACTICE EXAM</span>
+                                <h2 id="sr-mock-modal-title">Create Mock Test</h2>
                             </div>
                             <button
                                 type="button"
                                 className="sr-modal-close"
                                 aria-label="Close dialog"
-                                onClick={() => setShowPaperSelector(false)}
-                                disabled={creatingMockSession}
+                                onClick={() => !creatingMockSession && setShowPaperSelector(false)}
                             >
-                                ×
+                                <X size={18} />
                             </button>
                         </header>
 
-                        <div className="sr-mock-modal-content">
-                            <fieldset className="sr-source-choice">
-                                <legend>Question paper source</legend>
-                                <label>
+                        <div className="sr-mock-modal-body">
+                            <div className="sr-source-choice-row">
+                                <label className="sr-source-choice">
                                     <input
                                         type="radio"
-                                        name="paper-source"
+                                        name="mock-paper-source"
                                         value="dataset"
                                         checked={paperSource === 'dataset'}
-                                        onChange={() => {
-                                            setPaperSource('dataset');
-                                            setPaperSelectionError('');
-                                        }}
+                                        onChange={() => setPaperSource('dataset')}
                                         disabled={creatingMockSession}
                                     />
-                                    Choose from Dataset
+                                    <span>Question Paper Library</span>
                                 </label>
-                                <label>
+                                <label className="sr-source-choice">
                                     <input
                                         type="radio"
-                                        name="paper-source"
+                                        name="mock-paper-source"
                                         value="custom"
                                         checked={paperSource === 'custom'}
-                                        onChange={() => {
-                                            setPaperSource('custom');
-                                            setPaperSelectionError('');
-                                        }}
+                                        onChange={() => setPaperSource('custom')}
                                         disabled={creatingMockSession}
                                     />
-                                    Upload Custom Paper
+                                    <span>Upload Custom PDF</span>
                                 </label>
-                            </fieldset>
+                            </div>
 
                             {paperSource === 'dataset' ? (
                                 <div className="sr-dataset-picker">
-                                    <label className="sr-paper-select-label" htmlFor="mock-paper-search">
-                                        Choose Question Paper
-                                        <input
-                                            id="mock-paper-search"
-                                            className="sr-paper-select"
-                                            type="search"
-                                            placeholder="Search exam, year, paper or subject"
-                                            value={paperSearch}
-                                            onChange={(event) => setPaperSearch(event.target.value)}
-                                            disabled={creatingMockSession}
-                                        />
-                                    </label>
+                                    <input
+                                        type="search"
+                                        className="sr-dataset-search"
+                                        placeholder="Search papers by exam, subject, or year..."
+                                        value={paperSearch}
+                                        onChange={(event) => setPaperSearch(event.target.value)}
+                                        disabled={creatingMockSession || paperSelectionLoading}
+                                    />
+
                                     {paperSelectionLoading ? (
-                                        <p className="sr-paper-empty" role="status">Loading available papers...</p>
+                                        <p className="sr-paper-loading">Loading question papers...</p>
                                     ) : paperSelectionError ? null : availablePapers.length === 0 ? (
-                                        <p className="sr-paper-empty">No question papers are currently available.</p>
+                                        <p className="sr-paper-empty">No question papers currently available.</p>
                                     ) : (
                                         <div className="sr-dataset-paper-list" role="listbox" aria-label="Dataset question papers">
                                             {availablePapers
@@ -1124,24 +1142,27 @@ const StudyRoom = () => {
                                                         }}
                                                         disabled={creatingMockSession}
                                                     >
-                                                        <span className="sr-dataset-paper-name">{paper.examTag} {paper.examYear ?? ''} · {paper.paperName || paper.title}</span>
+                                                        <span className="sr-dataset-paper-name">
+                                                            {paper.examTag} {paper.examYear ?? ''} • {paper.paperName || paper.title}
+                                                        </span>
                                                         <span className="sr-dataset-paper-meta">
-                                                            {paper.subject || 'Subject not provided'} · {paper.questions?.length ?? 0} questions
-                                                            {paper.evaluationType ? ` · ${paper.evaluationType}` : ''}
+                                                            {paper.subject || 'Subject not specified'} • {paper.questions?.length ?? 0} questions
+                                                            {paper.evaluationType ? ` • ${paper.evaluationType}` : ''}
                                                         </span>
                                                     </button>
                                                 ))}
                                         </div>
                                     )}
+
                                     {selectedPaperId && (() => {
                                         const paper = availablePapers.find((item) => item.id === selectedPaperId);
                                         if (!paper) return null;
                                         return (
                                             <div className="sr-selected-paper" aria-live="polite">
                                                 <strong>{paper.examTag} {paper.examYear ?? ''}</strong>
-                                                <span>{paper.paperName || paper.title} · {paper.subject || 'Subject not provided'}</span>
-                                                <span>Evaluation: {paper.evaluationType || 'Not provided'}</span>
-                                                <span>{paper.totalMarks ? `${paper.totalMarks} marks` : 'Total marks not provided by source'}</span>
+                                                <span>{paper.paperName || paper.title} • {paper.subject || 'Subject'}</span>
+                                                <span>Evaluation: {paper.evaluationType || 'Peer reviewed'}</span>
+                                                <span>{paper.totalMarks ? `${paper.totalMarks} marks` : 'Total marks according to source'}</span>
                                             </div>
                                         );
                                     })()}
@@ -1149,7 +1170,7 @@ const StudyRoom = () => {
                             ) : (
                                 <div className="sr-custom-paper-picker">
                                     <label className="sr-custom-paper-label" htmlFor="custom-question-paper">
-                                        Upload Question Paper
+                                        Choose PDF Question Paper
                                         <input
                                             id="custom-question-paper"
                                             type="file"
@@ -1158,7 +1179,7 @@ const StudyRoom = () => {
                                             disabled={creatingMockSession}
                                         />
                                     </label>
-                                    <p>This PDF is the question paper shown to everyone in this mock room. It is not your answer script.</p>
+                                    <p className="sr-custom-paper-hint">This PDF is the question paper shown to everyone in this mock room during the test.</p>
                                     {customQuestionPaper && (
                                         <p className="sr-custom-paper-file" role="status">
                                             Selected: {customQuestionPaper.name} ({Math.ceil(customQuestionPaper.size / 1024)} KB)
@@ -1167,44 +1188,64 @@ const StudyRoom = () => {
                                 </div>
                             )}
 
-                            <label className="sr-paper-select-label" htmlFor="mock-exam-duration">
-                                Duration (minutes)
-                                <select
-                                    className="sr-paper-select"
-                                    value={['15', '30', '45', '60', '90'].includes(examDurationMinutes) ? examDurationMinutes : 'custom'}
-                                    onChange={(event) => {
-                                        if (event.target.value !== 'custom') setExamDurationMinutes(event.target.value);
-                                    }}
-                                    disabled={creatingMockSession}
-                                >
-                                    <option value="15">15 minutes</option>
-                                    <option value="30">30 minutes</option>
-                                    <option value="45">45 minutes</option>
-                                    <option value="60">60 minutes</option>
-                                    <option value="90">90 minutes</option>
-                                    <option value="custom">Custom</option>
-                                </select>
-                                <input
-                                    id="mock-exam-duration"
-                                    className="sr-paper-select sr-duration-input"
-                                    type="number"
-                                    min="1"
-                                    max="1440"
-                                    step="1"
-                                    placeholder="Enter duration"
-                                    value={examDurationMinutes}
-                                    onChange={(event) => setExamDurationMinutes(event.target.value)}
-                                    disabled={creatingMockSession}
-                                />
-                            </label>
-                            <p className="sr-duration-note">The exam stays in draft until the creator clicks Start Exam.</p>
+                            <div className="sr-form-group">
+                                <label className="sr-paper-select-label" htmlFor="mock-exam-duration">
+                                    Exam Duration
+                                </label>
+                                <div className="sr-duration-presets" role="radiogroup" aria-label="Exam duration options">
+                                    {[15, 30, 45, 60, 90].map((mins) => (
+                                        <button
+                                            type="button"
+                                            key={mins}
+                                            className={`sr-duration-pill ${durationOption === String(mins) ? 'is-active' : ''}`}
+                                            onClick={() => {
+                                                setDurationOption(String(mins));
+                                                setExamDurationMinutes(String(mins));
+                                            }}
+                                            disabled={creatingMockSession}
+                                        >
+                                            {mins} mins
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        className={`sr-duration-pill ${durationOption === 'custom' ? 'is-active' : ''}`}
+                                        onClick={() => {
+                                            setDurationOption('custom');
+                                            if (!examDurationMinutes || [15, 30, 45, 60, 90].includes(Number(examDurationMinutes))) {
+                                                setExamDurationMinutes('120');
+                                            }
+                                        }}
+                                        disabled={creatingMockSession}
+                                    >
+                                        Custom
+                                    </button>
+                                </div>
+                                {durationOption === 'custom' && (
+                                    <input
+                                        id="mock-exam-duration"
+                                        className="sr-input sr-duration-input"
+                                        type="number"
+                                        min="1"
+                                        max="1440"
+                                        step="1"
+                                        placeholder="Duration in minutes (e.g. 120)"
+                                        value={examDurationMinutes}
+                                        onChange={(event) => setExamDurationMinutes(event.target.value)}
+                                        disabled={creatingMockSession}
+                                        autoFocus
+                                    />
+                                )}
+                                <p className="sr-duration-note">The exam starts only when the creator presses Start Exam inside the mock room.</p>
+                            </div>
+
                             {paperSelectionError && <p className="sr-paper-error" role="alert">{paperSelectionError}</p>}
                         </div>
 
-                        <footer className="sr-paper-actions sr-modal-actions">
+                        <footer className="sr-modal-actions sr-paper-actions">
                             <button
                                 type="button"
-                                className="sr-btn sr-btn-outline"
+                                className="sr-btn sr-btn-ghost"
                                 onClick={() => setShowPaperSelector(false)}
                                 disabled={creatingMockSession}
                             >
@@ -1215,16 +1256,16 @@ const StudyRoom = () => {
                                 className="sr-btn sr-btn-primary"
                                 disabled={
                                     creatingMockSession
-                                    || paperSelectionLoading && paperSource === 'dataset'
+                                    || (paperSelectionLoading && paperSource === 'dataset')
                                     || !Number.isInteger(Number(examDurationMinutes))
                                     || Number(examDurationMinutes) < 1
                                     || Number(examDurationMinutes) > 1440
-                                    || paperSource === 'dataset' && (!selectedPaperId || !availablePapers.some((paper) => paper.id === selectedPaperId))
-                                    || paperSource === 'custom' && !customQuestionPaper
+                                    || (paperSource === 'dataset' && (!selectedPaperId || !availablePapers.some((paper) => paper.id === selectedPaperId)))
+                                    || (paperSource === 'custom' && !customQuestionPaper)
                                 }
                                 onClick={handleCreateMockSession}
                             >
-                                {creatingMockSession ? 'Creating...' : 'Create Mock Exam'}
+                                {creatingMockSession ? 'Creating...' : 'Create Mock Test'}
                             </button>
                         </footer>
                     </section>
@@ -1235,3 +1276,4 @@ const StudyRoom = () => {
 };
 
 export default StudyRoom;
+
