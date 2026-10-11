@@ -8,12 +8,10 @@ import Studyroom from './components/Studyroom/Studyroom';
 import Mockroom from './components/Mockroom/Mockroom';
 import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
 import Doubtforum from './components/Doubtforum/Doubtforum';
-import NotificationCenter from './components/common/NotificationCenter';
 
 function App() {
   return (
     <BrowserRouter>
-      <NotificationCenter />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/signin" element={<Signin />} />

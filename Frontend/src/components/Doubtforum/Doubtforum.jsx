@@ -127,6 +127,11 @@ function DoubtForumInner() {
         let isCurrent = true;
         let channel = null;
 
+        setDoubts([]);
+        setLoading(true);
+        setLoadError('');
+        setPostError('');
+
         const replaceDoubtFromServer = async (doubtId) => {
             try {
                 const fetchedDoubts = await getDoubts(currentRoomId);
@@ -167,21 +172,12 @@ function DoubtForumInner() {
                         void replaceDoubtFromServer(newDoubt?.id);
                     },
                 )
-                .on(
-                    'postgres_changes',
-                    {
-                        event: '*',
-                        schema: 'public',
-                        table: 'doubt_replies',
-                    },
-                    ({ new: newReply }) => {
-                        void replaceDoubtFromServer(newReply?.doubt_id);
-                    },
-                )
                 .on('broadcast', { event: 'doubt-posted' }, ({ payload }) => {
+                    if (payload?.roomId !== currentRoomId) return;
                     void replaceDoubtFromServer(payload?.doubtId);
                 })
                 .on('broadcast', { event: 'reply-added' }, ({ payload }) => {
+                    if (payload?.roomId !== currentRoomId) return;
                     void replaceDoubtFromServer(payload?.doubtId);
                 });
 
@@ -287,7 +283,7 @@ function DoubtForumInner() {
             void channelRef.current?.send({
                 type: 'broadcast',
                 event: 'doubt-posted',
-                payload: { doubtId: doubt.id },
+                payload: { roomId: currentRoomId, doubtId: doubt.id },
             })?.catch(() => {});
         } catch (error) {
             setPostError(error.message || 'Unable to post your doubt.');
@@ -357,7 +353,7 @@ function DoubtForumInner() {
             void channelRef.current?.send({
                 type: 'broadcast',
                 event: 'reply-added',
-                payload: { doubtId },
+                payload: { roomId: currentRoomId, doubtId },
             })?.catch(() => {});
         } catch (error) {
             setPostError(error.message || 'Unable to post your reply.');

@@ -1496,12 +1496,15 @@ export const submitPeerEvaluation = async (
   const paper = await getMockPaperById(session.paperId);
   if (!paper) throw new Error("The evaluation rubric could not be loaded.");
   const questions = new Map(paper.questions.map((question) => [question.id, question]));
-  if (!Array.isArray(rubricScores) || rubricScores.length !== questions.size) {
+  if (questions.size > 0 && (!Array.isArray(rubricScores) || rubricScores.length !== questions.size)) {
     throw new Error("A score is required for every rubric question.");
+  }
+  if (questions.size === 0 && !comments.trim()) {
+    throw new Error("Write feedback before submitting this custom-paper evaluation.");
   }
   const seenQuestionIds = new Set<string>();
   let totalScore = 0;
-  const normalizedScores = rubricScores.map(({ questionId, score }) => {
+  const normalizedScores = (questions.size === 0 ? [] : rubricScores).map(({ questionId, score }) => {
     const question = questions.get(questionId);
     if (!question || seenQuestionIds.has(questionId)) {
       throw new Error("The evaluation contains an invalid rubric question.");
