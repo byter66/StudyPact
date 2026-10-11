@@ -233,6 +233,7 @@
 /* ---------- Focus panel (center) ---------- */
 
 .sr-focus-panel {
+    grid-column: 2 / 4;
     align-items: center;
     justify-content: flex-start;
     padding-top: 20px;
@@ -566,9 +567,18 @@
 
 /* ---------- Right side panel: Doubt Forum & Room Chat ---------- */
 .sr-side-panel {
-    gap: 14px;
-    min-width: 0;
-    overflow: hidden;
+    position: fixed;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+}
+
+.sr-side-panel > * {
+    pointer-events: auto;
 }
 
 .sr-doubt-entry {
@@ -1229,7 +1239,15 @@
     }
 
     .sr-focus-panel {
+        grid-column: auto;
         padding-top: 12px;
+    }
+
+    .sr-side-panel {
+        position: static;
+        width: auto;
+        height: auto;
+        pointer-events: auto;
     }
 }
 
