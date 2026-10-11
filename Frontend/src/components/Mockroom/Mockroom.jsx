@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import { HelpCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
   getPeerEvaluation,
@@ -52,7 +53,8 @@ const MockRoom = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [phase, setPhase] = useState('loading');
-  const [examDurationMinutes, setExamDurationMinutes] = useState('');
+  const [examDurationMinutes, setExamDurationMinutes] = useState('60');
+  const [durationOption, setDurationOption] = useState('60');
   const [isStartingExam, setIsStartingExam] = useState(false);
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
@@ -91,9 +93,11 @@ const MockRoom = () => {
       ? Math.max(0, Math.ceil((submissionDeadlineMs - currentServerTime) / 1000))
       : 0;
     setTimeRemaining(secondsLeft);
-    setExamDurationMinutes(session.durationSeconds
+    const loadedMins = session.durationSeconds
       ? String(Math.ceil(session.durationSeconds / 60))
-      : '');
+      : '60';
+    setExamDurationMinutes(loadedMins);
+    setDurationOption([15, 30, 45, 60, 90].includes(Number(loadedMins)) ? loadedMins : 'custom');
     setSessionData({
       ...session,
       attempt: payload.attempt ?? null,
@@ -149,6 +153,20 @@ const MockRoom = () => {
             console.error('Unable to check peer evaluations on mount:', evalError);
           }
         }
+        const endsAt = payload?.session?.endsAt;
+        if (
+          (endsAt && Date.parse(endsAt) <= Date.now())
+          || location.state?.assignmentId
+        ) {
+          const overview = await getPeerEvaluations(sessionId);
+          if (isMounted) {
+            setPeerEvaluation(overview);
+            if (overview?.available) {
+              setTimeRemaining(0);
+              setPhase('closed');
+            }
+          }
+        }
       } catch (loadError) {
         if (isMounted) {
           setError(loadError?.message || 'Unable to load the mock session.');
@@ -164,7 +182,7 @@ const MockRoom = () => {
     return () => {
       isMounted = false;
     };
-  }, [applySessionPayload, location.state?.assignmentId, sessionId]);
+  }, [applySessionPayload, sessionId, location.state?.assignmentId]);
 
   useEffect(() => {
     if (!sessionId || !supabase) return undefined;
@@ -207,7 +225,7 @@ const MockRoom = () => {
       if (mockRoomChannelRef.current === channel) mockRoomChannelRef.current = null;
       void supabase.removeChannel(channel);
     };
-  }, [applySessionPayload, sessionId]);
+  }, [applySessionPayload, sessionId, location.state?.assignmentId]);
 
   useEffect(() => {
     if (!sessionData || (phase !== 'live' && phase !== 'submission-window')) return undefined;
@@ -422,7 +440,7 @@ const MockRoom = () => {
     }
   };
 
-  const handleOpenPeerAssignment = async (assignment) => {
+  const handleOpenPeerAssignment = useCallback(async (assignment) => {
     setPeerEvaluationError('');
     try {
       const evaluation = await getPeerEvaluation(sessionId, assignment.id);
@@ -435,15 +453,30 @@ const MockRoom = () => {
           savedScores[score.questionId] = String(score.score);
         }
       });
+      if (location.state?.savedScores) {
+        Object.entries(location.state.savedScores).forEach(([qId, val]) => {
+          if (val !== undefined && val !== '') {
+            savedScores[qId] = String(val);
+          }
+        });
+      }
       setEvaluationScores(savedScores);
-      setEvaluationComments(evaluation.comments || '');
+      setEvaluationComments(
+        location.state?.savedComments !== undefined
+          ? location.state.savedComments
+          : (evaluation.comments || '')
+      );
+      setDiscussionAssignment({
+        assignmentId: evaluation.assignmentId,
+        participantName: evaluation.participantName,
+      });
       return true;
     } catch (loadError) {
       console.error('Unable to open peer evaluation:', loadError);
       setPeerEvaluationError(loadError?.message || 'Unable to open this peer evaluation.');
       return false;
     }
-  };
+  }, [sessionId, location.state]);
 
   useEffect(() => {
     const assignmentId = location.state?.assignmentId;
@@ -488,6 +521,47 @@ const MockRoom = () => {
       isCurrent = false;
     };
   }, [activePeerAssignment, location.state, sessionId]);
+    const assignment = peerEvaluation.assignments.find((item) => item.id === assignmentId);
+    if (!assignment) return;
+    void handleOpenPeerAssignment(assignment).then((restored) => {
+      if (restored) restoredAssignmentRef.current = assignmentId;
+    });
+  }, [location.state, peerEvaluation, handleOpenPeerAssignment]);
+
+  const handleOpenAuthorDiscussion = (evaluation) => {
+    setDiscussionError('');
+    setDiscussionAssignment({
+      assignmentId: evaluation.assignmentId,
+      participantName: evaluation.evaluator,
+    });
+  };
+
+  const handleSendDiscussionMessage = async (event) => {
+    event.preventDefault();
+    const content = discussionDraft.trim();
+    if (!content || discussionSending || !discussionAssignment) return;
+    setDiscussionSending(true);
+    setDiscussionError('');
+    try {
+      const message = await postEvaluationDiscussionMessage(
+        sessionId,
+        discussionAssignment.assignmentId,
+        content,
+      );
+      setDiscussionMessages((current) => (
+        current.some((item) => item.id === message.id)
+          ? current
+          : [...current, message].sort((left, right) => (
+            new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+          ))
+      ));
+      setDiscussionDraft('');
+    } catch (sendError) {
+      setDiscussionError(sendError?.message || 'Unable to send the discussion message.');
+    } finally {
+      setDiscussionSending(false);
+    }
+  };
 
   const handleSubmitPeerEvaluation = async (event) => {
     event.preventDefault();
@@ -537,7 +611,7 @@ const MockRoom = () => {
   if (sessionLoading) {
     return (
       <div className={`mr-page ${phase === 'live' ? 'mr-live-page' : ''}`}>
-        <div className="mr-loading">Loading mock session…</div>
+        <div className="mr-loading">Loading mock session...</div>
       </div>
     );
   }
@@ -558,7 +632,7 @@ const MockRoom = () => {
         <div className="mr-room-info">
           <span className="mr-badge">{paper?.examTag || 'Mock'}</span>
           <h1 className="mr-title">
-            {paper ? `${paper.examTag} ${paper.examYear ?? ''} · ${paper.paperName || paper.title}` : 'Mock Exam'}
+            {paper ? `${paper.examTag} ${paper.examYear ?? ''} • ${paper.paperName || paper.title}` : 'Mock Exam'}
           </h1>
         </div>
         <Link to={sessionData?.roomId ? `/study-room/${sessionData.roomId}` : '/dashboard'} className="mr-link-btn">
@@ -577,7 +651,7 @@ const MockRoom = () => {
 
           {showUploadPanel ? (
             <div className="mr-upload-panel">
-              <h2 className="mr-upload-title">ANSWER SCRIPT SUBMISSION</h2>
+              <h2 className="mr-upload-title">Answer Script Submission</h2>
               {phase === 'submission-window' ? (
                 <>
                   <div className="mr-submission-countdown" role="timer" aria-live="off">
@@ -596,7 +670,7 @@ const MockRoom = () => {
                           onChange={handleFileChange}
                           disabled={!canSubmit || isSubmitting}
                         />
-                        <span>[ Choose PDF ]</span>
+                        <span>Choose PDF File</span>
                       </label>
 
                       {selectedFile ? (
@@ -634,7 +708,7 @@ const MockRoom = () => {
               ) : null}
               {phase === 'closed' || peerEvaluation?.available ? (
                 <section className="mr-peer-evaluation" aria-labelledby="mr-peer-evaluation-title">
-                  <h2 id="mr-peer-evaluation-title">PEER EVALUATION</h2>
+                  <h2 id="mr-peer-evaluation-title">Peer Evaluation</h2>
                   {peerEvaluationLoading ? <p>Loading peer evaluations...</p> : null}
                   {peerEvaluationError ? <p className="mr-peer-error" role="alert">{peerEvaluationError}</p> : null}
                   {!peerEvaluationLoading && peerEvaluation && !peerEvaluation.available ? (
@@ -674,25 +748,32 @@ const MockRoom = () => {
                           Complete all assigned peer evaluations to unlock your result.
                         </p>
                       ) : null}
-                      <Link
-                        to={`/doubt-forum/${sessionData.roomId}`}
-                        state={{
-                          returnTo: `/mock-room/${sessionId}`,
-                          ...(activePeerAssignment?.assignmentId
-                            ? { assignmentId: activePeerAssignment.assignmentId }
-                            : {}),
-                        }}
-                        className="mr-doubt-entry"
-                      >
-                        <span className="mr-doubt-icon" aria-hidden="true">?</span>
-                        <span>
-                          <span className="mr-doubt-title">Doubt Forum — Study Room</span>
-                          <span className="mr-doubt-sub">Ask questions while evaluating peer papers</span>
-                        </span>
-                      </Link>
+                      {(() => {
+                        const evaluationContextId = activePeerAssignment?.assignmentId
+                          || discussionAssignment?.assignmentId;
+                        if (!evaluationContextId) return null;
+                        return (
+                          <Link
+                            to={`/doubt-forum/${sessionData.roomId}`}
+                            state={{
+                              returnTo: `/mock-room/${sessionId}`,
+                              assignmentId: evaluationContextId,
+                              savedScores: evaluationScores,
+                              savedComments: evaluationComments,
+                            }}
+                            className="mr-doubt-entry"
+                          >
+                            <span className="mr-doubt-icon" aria-hidden="true"><HelpCircle size={18} /></span>
+                            <span>
+                              <span className="mr-doubt-title">Doubt Forum — Study Room</span>
+                              <span className="mr-doubt-sub">Ask questions while evaluating peer papers</span>
+                            </span>
+                          </Link>
+                        );
+                      })()}
                       {peerEvaluation.ownResult ? (
                         <div className="mr-peer-result">
-                          <h3>Your evaluated answer script</h3>
+                          <h3>Your Evaluated Script & Feedback</h3>
                           <a href={peerEvaluation.ownResult.downloadUrl} target="_blank" rel="noreferrer">
                             View your answer script
                           </a>
@@ -825,21 +906,50 @@ const MockRoom = () => {
             <p className="mr-panel-label">Ready to begin?</p>
             {sessionData?.createdBy === user?.id ? (
               <>
-                <label className="mr-duration-label" htmlFor="exam-duration-minutes">
-                  Exam duration (minutes)
-                  <input
-                    id="exam-duration-minutes"
-                    type="number"
-                    min="1"
-                    max="1440"
-                    step="1"
-                    value={examDurationMinutes}
-                    onChange={(event) => setExamDurationMinutes(event.target.value)}
-                    disabled={isStartingExam}
-                  />
-                </label>
+                <div className="mr-duration-control">
+                  <span className="mr-duration-label">Exam duration</span>
+                  <div className="mr-duration-presets" role="radiogroup" aria-label="Exam duration options">
+                    {[15, 30, 45, 60, 90].map((mins) => (
+                      <button
+                        type="button"
+                        key={mins}
+                        className={`mr-duration-pill ${durationOption === String(mins) ? 'is-active' : ''}`}
+                        onClick={() => {
+                          setDurationOption(String(mins));
+                          setExamDurationMinutes(String(mins));
+                        }}
+                        disabled={isStartingExam}
+                      >
+                        {mins}m
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className={`mr-duration-pill ${durationOption === 'custom' ? 'is-active' : ''}`}
+                      onClick={() => setDurationOption('custom')}
+                      disabled={isStartingExam}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                  {durationOption === 'custom' && (
+                    <input
+                      id="exam-duration-minutes"
+                      className="mr-input mr-duration-custom-input"
+                      type="number"
+                      min="1"
+                      max="1440"
+                      step="1"
+                      placeholder="Duration in minutes (e.g. 120)"
+                      value={examDurationMinutes}
+                      onChange={(event) => setExamDurationMinutes(event.target.value)}
+                      disabled={isStartingExam}
+                      autoFocus
+                    />
+                  )}
+                </div>
                 <p className="mr-duration-help">
-                  The source dataset does not specify a duration. Set the shared exam timer before starting.
+                  Set the shared exam timer before starting. The exam starts only when the creator clicks Start Exam.
                 </p>
                 {error ? <div className="mr-error-box" role="alert">{error}</div> : null}
                 <button

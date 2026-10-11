@@ -1,245 +1,322 @@
-/* ============================================================
-   RoomCard.css — complete file, responsive
-   ============================================================ */
+/* ==========================================================================
+   StudyPact — Archival Chamber Dossier Card
+   Architectural Horizontal & Grid Hybrid Layout
+   Distinctive Visual Identity for Disciplined Scholars
+   ========================================================================== */
 
-.room-card {
-    position: relative;
-    display: flex;
+.chamber-dossier {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
+  background: var(--bg-surface, #FFFFFF);
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  border-radius: 8px;
+  padding: 18px 22px;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.chamber-dossier:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong, #BA4A2B);
+  box-shadow: 0 10px 24px -6px rgba(20, 23, 21, 0.08), 0 2px 6px -2px rgba(20, 23, 21, 0.04);
+}
+
+.chamber-dossier.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Left Ribbon / Serial Indicator */
+.chamber-dossier-ribbon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 64px;
+  padding-right: 16px;
+  border-right: 1px dashed var(--border-hairline, #E6E1D6);
+}
+
+.chamber-serial {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #7A756D);
+}
+
+/* Main Body Area */
+.chamber-dossier-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chamber-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.chamber-title {
+  font-family: var(--font-display, "Newsreader", Georgia, serif);
+  font-size: 1.18rem;
+  font-weight: 600;
+  color: var(--text-main, #141715);
+  margin: 0;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.chamber-live-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(35, 82, 59, 0.08);
+  border: 1px solid rgba(35, 82, 59, 0.2);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.chamber-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-forest, #23523B);
+  box-shadow: 0 0 0 2px rgba(35, 82, 59, 0.2);
+  animation: chamberPulse 2s infinite ease-in-out;
+}
+
+@keyframes chamberPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
+.chamber-pulse-label {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-forest, #23523B);
+}
+
+.chamber-desc {
+  font-size: 0.84rem;
+  color: var(--text-muted, #666057);
+  line-height: 1.45;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Telemetry: Occupancy and Key */
+.chamber-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.chamber-occupancy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chamber-occupancy-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--text-muted, #7A756D);
+}
+
+.chamber-icon {
+  color: var(--text-muted, #7A756D);
+}
+
+.chamber-occupancy-segments {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.occupancy-segment {
+  width: 10px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--border-hairline, #E6E1D6);
+  transition: background 0.2s;
+}
+
+.occupancy-segment.filled {
+  background: var(--color-terracotta, #BA4A2B);
+}
+
+.chamber-code-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-surface-warm, #F2EFE8);
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.72rem;
+  color: var(--text-main, #141715);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chamber-code-chip:hover {
+  background: #E8E4DA;
+  border-color: var(--border-strong, #BA4A2B);
+}
+
+.chamber-code-chip.copied {
+  background: rgba(35, 82, 59, 0.12);
+  border-color: var(--color-forest, #23523B);
+  color: var(--color-forest, #23523B);
+}
+
+.chamber-code-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted, #7A756D);
+}
+
+.chamber-code-val {
+  font-weight: 600;
+}
+
+.chamber-copy-icon {
+  opacity: 0.6;
+}
+
+/* Right Action Trigger */
+.chamber-dossier-action {
+  flex-shrink: 0;
+}
+
+.chamber-enter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg-surface-warm, #F2EFE8);
+  color: var(--text-main, #141715);
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-family: var(--font-sans, "Plus Jakarta Sans", sans-serif);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.chamber-dossier:hover .chamber-enter-btn {
+  background: var(--color-terracotta, #BA4A2B);
+  border-color: var(--color-terracotta, #BA4A2B);
+  color: #FFFFFF;
+}
+
+.chamber-dossier:hover .chamber-arrow {
+  transform: translateX(3px);
+}
+
+.chamber-arrow {
+  transition: transform 0.18s ease;
+}
+
+/* Create Chamber Placeholder Card */
+.chamber-dossier-create {
+  border: 1px dashed var(--border-strong, #BA4A2B);
+  background: rgba(186, 74, 43, 0.02);
+  cursor: pointer;
+}
+
+.chamber-dossier-create:hover {
+  background: rgba(186, 74, 43, 0.05);
+  border-color: var(--color-terracotta, #BA4A2B);
+}
+
+.chamber-create-icon-ring {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(186, 74, 43, 0.1);
+  color: var(--color-terracotta, #BA4A2B);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chamber-create-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chamber-create-title {
+  font-family: var(--font-display, "Newsreader", Georgia, serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-main, #141715);
+  margin: 0;
+}
+
+.chamber-create-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted, #7A756D);
+  margin: 2px 0 0 0;
+}
+
+.chamber-create-badge {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--color-terracotta, #BA4A2B);
+  border: 1px solid rgba(186, 74, 43, 0.3);
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chamber-dossier {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 14px;
+  }
+  .chamber-dossier-ribbon {
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px dashed var(--border-hairline, #E6E1D6);
     width: 100%;
-    text-align: left;
-    background: #FDFBF7;
-    border: 1px solid #EDE6D9;
-    border-radius: 14px;
-    padding: 18px 20px;
-    cursor: pointer;
-    font-family: inherit;
-    box-shadow: 0 1px 3px rgba(33, 31, 28, 0.04);
-    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
-}
-
-.room-card:hover {
-    box-shadow: 0 10px 26px rgba(33, 31, 28, 0.10);
-    transform: translateY(-2px);
-    border-color: #DCD2C0;
-}
-
-.room-card:active {
-    transform: translateY(0);
-}
-
-.room-card:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.room-card-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    padding-bottom: 8px;
+    justify-content: flex-start;
+  }
+  .chamber-dossier-action {
     width: 100%;
-}
-
-.room-card-tag {
-    display: inline-flex;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-}
-
-/* Tint backgrounds pulled from global tokens.css — falls back safely if unset */
-.tint-a .room-card-tag { background: var(--tint-a-bg, #F6EDE8); color: var(--tint-a-ink, #9E4522); }
-.tint-b .room-card-tag { background: var(--tint-b-bg, #EAF0F6); color: var(--tint-b-ink, #2C5B88); }
-.tint-c .room-card-tag { background: var(--tint-c-bg, #F7F1E5); color: var(--tint-c-ink, #8A6820); }
-.tint-d .room-card-tag { background: var(--tint-d-bg, #EAEFEA); color: var(--tint-d-ink, #37633E); }
-.tint-e .room-card-tag { background: var(--tint-e-bg, #F2EBF6); color: var(--tint-e-ink, #673778); }
-.tint-f .room-card-tag { background: var(--tint-f-bg, #F6ECEF); color: var(--tint-f-ink, #852C4D); }
-
-.room-card-live {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #5C6B3F;
-}
-
-.room-card-live::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #5C6B3F;
-    box-shadow: 0 0 0 3px rgba(92, 107, 63, 0.2);
-    animation: livePulse 2s ease-in-out infinite;
-    flex-shrink: 0;
-}
-
-@keyframes livePulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-
-.room-card-title {
-    margin: 0;
-    font-family: "Newsreader", "Playfair Display", Georgia, serif;
-    font-size: 17px;
-    font-weight: 600;
-    color: #211F1C;
-    line-height: 1.3;
-}
-
-.room-card-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  }
+  .chamber-enter-btn {
     width: 100%;
-    margin-top: 4px;
-}
-
-.room-card-avatars {
-    display: flex;
-    align-items: center;
-}
-
-.room-card-avatar {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: #F4EFE6;
-    border: 2px solid #FDFBF7;
-    color: #6B6558;
-    font-size: 11px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
     justify-content: center;
-    margin-left: -8px;
-    transition: opacity 0.2s ease, filter 0.2s ease;
-}
-
-.room-card-avatar:first-child {
-    margin-left: 0;
-}
-
-.room-card-avatar.is-active {
-    opacity: 1;
-    box-shadow: 0 0 0 2px #5C6B3F;
-}
-
-.room-card-avatar.is-inactive {
-    opacity: 0.45;
-    filter: grayscale(30%);
-}
-
-.room-card-avatar-more {
-    background: #EDE6D9;
-    color: #6B6558;
-    opacity: 0.7;
-}
-
-.room-card-count {
-    font-size: 12px;
-    color: #6B6558;
-    white-space: nowrap;
-}
-
-/* --- Create Room variant card --- */
-.room-card-create {
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    border: 1.5px dashed #C1602E;
-    background: transparent;
-    color: #C1602E;
-    min-height: 140px;
-    gap: 8px;
-}
-
-.room-card-create:hover {
-    background: #FBEFE6;
-    border-color: #A94F24;
-}
-
-.room-card-create-plus {
-    font-size: 26px;
-    line-height: 1;
-    font-weight: 300;
-}
-
-.room-card-create-label {
-    font-size: 13px;
-    font-weight: 600;
-}
-
-/* ============================================================
-   Responsive
-   ============================================================ */
-
-/* Tablet — slightly tighter padding, same grid columns
-   (grid itself is controlled by .room-grid in Dashboard.css) */
-@media (max-width: 900px) {
-    .room-card {
-        padding: 16px 18px;
-    }
-
-    .room-card-title {
-        font-size: 16px;
-    }
-}
-
-/* Mobile — full width cards (Dashboard.css already forces
-   .room-grid to grid-template-columns: 1fr at 640px), shrink
-   avatar stack slightly, stack top row if tag+live wraps */
-@media (max-width: 640px) {
-    .room-card {
-        padding: 16px;
-        gap: 8px;
-    }
-
-    .room-card-top {
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    .room-card-title {
-        font-size: 15px;
-    }
-
-    .room-card-avatar {
-        width: 24px;
-        height: 24px;
-        font-size: 10px;
-    }
-
-    .room-card-meta {
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .room-card-count {
-        font-size: 11px;
-    }
-}
-
-/* Very small phones (~360px and under) */
-@media (max-width: 380px) {
-    .room-card {
-        padding: 14px;
-    }
-
-    .room-card-title {
-        font-size: 14.5px;
-    }
-
-    .room-card-count {
-        width: 100%;
-        text-align: right;
-    }
+  }
 }

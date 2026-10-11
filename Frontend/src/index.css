@@ -1,0 +1,351 @@
+/* ==========================================================================
+   StudyPact — Editorial & Academic Discipline Design System
+   Human-Crafted · Architectural · Grounded · High Contrast & Typographic Gravitas
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500;1,6..72,600&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+
+:root {
+  /* Warm Archival Canvas & Surfaces (Warm Bone, Vellum & Porcelain) */
+  --bg-canvas: #F7F5F0;
+  --bg-canvas-subtle: #EFECE4;
+  --bg-surface: #FFFFFF;
+  --bg-surface-alt: #F4F1EA;
+  --bg-hover: #ECE8DE;
+  --bg-dark: #141715;
+  --bg-dark-surface: #1C211E;
+
+  /* Architectural Hairline Borders */
+  --border-hairline: #E6E1D6;
+  --border-subtle: #DBD5C7;
+  --border-default: #CFC7B5;
+  --border-strong: #968F7E;
+  --border-dark: #2B332E;
+
+  /* Deep Ink & Typography */
+  --text-main: #141715;
+  --text-primary: #141715;
+  --text-secondary: #484E49;
+  --text-tertiary: #757D76;
+  --text-muted: #757D76;
+  --text-placeholder: #9C988F;
+  --text-inverse: #F7F5F0;
+  --text-inverse-muted: #A6AFA8;
+
+  /* Primary Accent: Obsidian Pine */
+  --primary: #141715;
+  --primary-hover: #262B28;
+  --primary-active: #0B0D0C;
+  --primary-subtle: #EBECE8;
+  --primary-border: #D1D5CE;
+
+  /* Distinctive Warm Accent: Burnished Terracotta */
+  --terracotta: #BA4A2B;
+  --terracotta-hover: #9E3C21;
+  --terracotta-subtle: #F9EFEA;
+  --terracotta-border: #F0D0C6;
+
+  /* Scholarly Forest (Focus / Presence / Live Status) */
+  --forest: #23523B;
+  --forest-hover: #193E2C;
+  --forest-subtle: #EDF4F0;
+  --forest-border: #C8DFD2;
+
+  /* Warm Ochre / Streak Flame */
+  --streak: #B8621B;
+  --streak-hover: #9B5014;
+  --streak-subtle: #FDF4E9;
+  --streak-border: #F6DAC0;
+
+  /* Status Tokens */
+  --danger: #B3261E;
+  --danger-subtle: #FDF0EF;
+  --danger-border: #F8CBC7;
+
+  --warning: #B8621B;
+  --warning-subtle: #FDF4E9;
+  --warning-border: #F6DAC0;
+
+  --info: #225178;
+  --info-subtle: #EEF4F9;
+  --info-border: #C8DCED;
+
+  /* Archival Exam Tags */
+  --badge-upsc-bg: #F7EDE8;
+  --badge-upsc-text: #96351B;
+  --badge-upsc-border: #ECC9BE;
+
+  --badge-gate-bg: #EEF3F7;
+  --badge-gate-text: #214C74;
+  --badge-gate-border: #C8DBEA;
+
+  --badge-jee-bg: #EDF4EE;
+  --badge-jee-text: #1F5434;
+  --badge-jee-border: #C6DFC9;
+
+  --badge-neet-bg: #F7EEF3;
+  --badge-neet-text: #78264E;
+  --badge-neet-border: #E8CADB;
+
+  --badge-cat-bg: #F8F3EA;
+  --badge-cat-text: #7B4C17;
+  --badge-cat-border: #EADBCA;
+
+  --badge-general-bg: #EDE9E1;
+  --badge-general-text: #484E49;
+  --badge-general-border: #DCD5C8;
+
+  /* Typographic Hierarchy */
+  --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-heading: var(--font-serif);
+
+  /* Precise Architectural Radii (Clean, Not Bulky Bubbles) */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+
+  /* Restrained Tactile Shadows */
+  --shadow-xs: 0 1px 2px rgba(20, 23, 21, 0.04);
+  --shadow-sm: 0 1px 3px rgba(20, 23, 21, 0.05), 0 1px 2px rgba(20, 23, 21, 0.03);
+  --shadow-md: 0 4px 8px -2px rgba(20, 23, 21, 0.05), 0 2px 4px -1px rgba(20, 23, 21, 0.03);
+  --shadow-lg: 0 12px 24px -6px rgba(20, 23, 21, 0.07), 0 4px 8px -2px rgba(20, 23, 21, 0.03);
+
+  /* Layout */
+  --max-width: 1240px;
+  --header-height: 64px;
+
+  /* Transitions */
+  --transition-fast: 140ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-base: 220ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-smooth: 320ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Base Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Editorial Heading System */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-main);
+  font-family: var(--font-heading);
+  font-weight: 500;
+  line-height: 1.18;
+  letter-spacing: -0.015em;
+}
+
+h1 { font-size: 2.35rem; }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.3rem; }
+h4 { font-size: 1.05rem; }
+
+p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+/* Reusable UI Components */
+
+/* Buttons */
+.sp-btn, .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+}
+
+.sp-btn:disabled, .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Primary Button: Obsidian Pine with subtle tactile bevel */
+.sp-btn-primary, .btn-primary {
+  background-color: var(--primary);
+  color: var(--text-inverse);
+  border-color: var(--primary);
+  box-shadow: 0 1px 2px rgba(20, 23, 21, 0.16);
+}
+
+.sp-btn-primary:hover, .btn-primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(20, 23, 21, 0.18);
+}
+
+/* Secondary Button: Clean Archival Border */
+.sp-btn-secondary, .btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+  border-color: var(--border-default);
+  box-shadow: 0 1px 2px rgba(20, 23, 21, 0.03);
+}
+
+.sp-btn-secondary:hover, .btn-secondary:hover {
+  background-color: var(--bg-canvas-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-main);
+}
+
+/* Ghost Button */
+.sp-btn-ghost, .btn-ghost {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+
+.sp-btn-ghost:hover, .btn-ghost:hover {
+  background-color: var(--bg-canvas-subtle);
+  color: var(--text-main);
+}
+
+.sp-btn-terracotta, .btn-terracotta {
+  background-color: var(--terracotta);
+  color: #FFFFFF;
+  border-color: var(--terracotta);
+}
+
+.sp-btn-terracotta:hover, .btn-terracotta:hover {
+  background-color: var(--terracotta-hover);
+  border-color: var(--terracotta-hover);
+}
+
+.btn-sm, .sp-btn-sm {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.btn-lg, .sp-btn-lg {
+  padding: 12px 22px;
+  font-size: 0.95rem;
+  border-radius: var(--radius-md);
+}
+
+/* Inputs */
+.sp-input, input[type="text"], input[type="email"], input[type="password"], textarea, select {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--text-main);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.sp-input:focus, input:focus, textarea:focus, select:focus {
+  border-color: var(--text-main);
+  box-shadow: 0 0 0 3px rgba(20, 23, 21, 0.07);
+}
+
+/* Academic Archival Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.badge-upsc { background: var(--badge-upsc-bg); color: var(--badge-upsc-text); border-color: var(--badge-upsc-border); }
+.badge-gate { background: var(--badge-gate-bg); color: var(--badge-gate-text); border-color: var(--badge-gate-border); }
+.badge-jee  { background: var(--badge-jee-bg);  color: var(--badge-jee-text);  border-color: var(--badge-jee-border);  }
+.badge-neet { background: var(--badge-neet-bg); color: var(--badge-neet-text); border-color: var(--badge-neet-border); }
+.badge-cat  { background: var(--badge-cat-bg);  color: var(--badge-cat-text);  border-color: var(--badge-cat-border);  }
+.badge-general { background: var(--badge-general-bg); color: var(--badge-general-text); border-color: var(--badge-general-border); }
+
+/* Editorial Monogram Tag */
+.archival-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  padding: 2px 0;
+}
+
+.archival-tag::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--terracotta);
+}
+
+/* Fine Editorial Rules */
+hr.folio-rule {
+  border: none;
+  border-top: 1px solid var(--border-hairline);
+  margin: 32px 0;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-canvas);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}

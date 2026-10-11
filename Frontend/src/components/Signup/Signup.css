@@ -1,365 +1,242 @@
-* {
-    padding: 0;
-    margin: 0;
-    box-sizing: border-box;
+/* ==========================================================================
+   StudyPact — Editorial & Architectural Authentication System: Sign Up
+   The Aspirant Covenant Charter & Induction Terminal
+   ========================================================================== */
+
+.signup-page {
+  background-color: var(--bg-canvas, #F7F5F0);
 }
 
-html, body, #root {
-    width: 100%;
-    height: 100%;
+.signup-grid-frame {
+  grid-template-columns: 1.18fr 0.82fr;
 }
 
-.signup-section {
-    display: flex;
-    width: 100vw;
-    min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+.auth-cohort-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: var(--bg-surface-alt, #F4F1EA);
+  border: 1px solid var(--border-hairline, #E6E1D6);
 }
 
-
-.signup-photo {
-    position: relative;
-    width: 50%;
-    min-height: 100vh;
-    padding: 32px 40px;
-    display: flex;
-    flex-direction: column;
-    color: #ffffff;
-    overflow: hidden;
+.cohort-icon {
+  color: var(--terracotta, #BA4A2B);
 }
 
-.signup-photo::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    background: url('../images/sign.jpg') center/cover no-repeat;
+.cohort-text {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary, #484E49);
 }
 
-.signup-photo::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: linear-gradient(
-        180deg,
-        rgba(38, 33, 27, 0.85) 0%,
-        rgba(38, 33, 27, 0.55) 45%,
-        rgba(38, 33, 27, 0.75) 100%
-    );
+/* --------------------------------------------------------------------------
+   THE COVENANT CHARTER CARD
+   -------------------------------------------------------------------------- */
+.covenant-charter-card {
+  background: var(--bg-surface, #FFFFFF);
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 16px -4px rgba(20, 23, 21, 0.04);
+  max-width: 530px;
 }
 
-.signup-photo > * {
-    position: relative;
-    z-index: 2;
+.covenant-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-hairline, #E6E1D6);
+  margin-bottom: 16px;
 }
 
-.signup-photo-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 24px;
-    flex-wrap: wrap;
+.covenant-badge {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--terracotta, #BA4A2B);
 }
 
-.brand-badge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: fit-content;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
-    padding: 8px 18px;
-    border-radius: 20px;
-    flex-shrink: 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+.covenant-rule-tag {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary, #484E49);
+  background: var(--bg-surface-alt, #F4F1EA);
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  padding: 2px 7px;
+  border-radius: 4px;
 }
 
-.brand-name {
-    font-weight: 700;
-    font-size: 15px;
-    color: #211f1c;
+.covenant-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.brand-icon {
-    font-size: 16px;
+.covenant-rule-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-surface-alt, #F4F1EA);
+  border: 1px solid rgba(230, 225, 214, 0.6);
+  transition: all 0.15s ease;
 }
 
-.signup-photo-content {
-    max-width: 320px;
-    text-align: right;
+.covenant-rule-item:hover {
+  background: var(--bg-canvas-subtle, #EFECE4);
+  border-color: var(--border-subtle, #DBD5C7);
 }
 
-.signup-headline {
-    font-size: 32px;
-    line-height: 1.25;
-    font-weight: 700;
-    margin: 0 0 12px 0;
-    letter-spacing: -0.3px;
-    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+.rule-number-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--bg-surface, #FFFFFF);
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
-.signup-subtext {
-    font-size: 14.5px;
-    line-height: 1.6;
-    color: #e4e0d5;
-    margin: 0;
-    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+.rule-num {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--terracotta, #BA4A2B);
 }
 
-.signup-photo-bottom {
-    margin-top: auto;
-    margin-bottom: 32px;
+.rule-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.signup-stats {
-    display: flex;
-    gap: 32px;
+.rule-title {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-main, #141715);
+  letter-spacing: -0.01em;
 }
 
-.stat {
-    display: flex;
-    flex-direction: column;
+.rule-desc {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #484E49);
 }
 
-.stat-number {
-    font-size: 22px;
-    font-weight: 700;
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+.covenant-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-hairline, #E6E1D6);
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--forest, #23523B);
 }
 
-.stat-label {
-    font-size: 13px;
-    color: #cfc9bd;
-    margin-top: 2px;
+.covenant-check-icon {
+  color: var(--forest, #23523B);
+  flex-shrink: 0;
 }
 
-.scroll-icon {
-    position: absolute;
-    bottom: 32px;
-    right: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.9);
-    color: #1a1917;
-    transition: transform 0.2s ease;
+/* --------------------------------------------------------------------------
+   ASPIRANT INDUCTION FORM STYLING
+   -------------------------------------------------------------------------- */
+.field-input-boxed {
+  border: 1px solid var(--border-subtle, #DBD5C7);
+  border-radius: 8px;
+  background: var(--bg-surface, #FFFFFF);
+  transition: all 0.15s ease;
 }
 
-.scroll-icon:hover {
-    transform: translateY(3px);
+.field-input-boxed:focus {
+  border-color: var(--terracotta, #BA4A2B);
+  box-shadow: 0 0 0 3px rgba(186, 74, 43, 0.12);
 }
 
-
-.signup-form-panel {
-    position: relative;
-    width: 50%;
-    min-height: 100vh;
-    background: linear-gradient(
-        90deg,
-        #ede1cd 0%,
-        #f6efe0 12%,
-        #faf6ee 30%,
-        #faf6ee 100%
-    );
-    box-shadow: inset 24px 0 40px -24px rgba(58, 44, 24, 0.18);
-    padding: 32px 64px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+.signup-actions-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
 }
 
-.menu-dots {
-    position: absolute;
-    top: 32px;
-    right: 32px;
-    background: #ffffff;
-    border: 1px solid #ece6d8;
-    border-radius: 999px;
-    width: 40px;
-    height: 40px;
-    cursor: pointer;
-    color: #6b6558;
-    letter-spacing: 1px;
+.terminal-secondary-link-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 11px 18px;
+  border-radius: 8px;
+  background: var(--bg-surface-alt, #F4F1EA);
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  color: var(--text-secondary, #484E49);
+  font-family: var(--font-sans, "Plus Jakarta Sans", sans-serif);
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
 }
 
-.signup-form-wrapper {
-    width: 100%;
-    max-width: 480px;
+.terminal-secondary-link-btn:hover {
+  background: var(--bg-canvas-subtle, #EFECE4);
+  border-color: var(--border-subtle, #DBD5C7);
+  color: var(--text-main, #141715);
 }
 
-.form-title {
-    font-size: 26px;
-    font-weight: 700;
-    color: #211f1c;
-    margin: 0 0 6px 0;
+.signup-pledge-note {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted, #757D76);
+  text-align: center;
+  margin: 0;
 }
 
-.form-subtitle {
-    font-size: 14px;
-    color: #6b6558;
-    margin: 0 0 28px 0;
+/* --------------------------------------------------------------------------
+   RESPONSIVE DESIGN (TABLET & MOBILE)
+   -------------------------------------------------------------------------- */
+@media (max-width: 980px) {
+  .signup-grid-frame {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .signup-charter-pane {
+    padding-right: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border-hairline, #E6E1D6);
+    padding-bottom: 36px;
+  }
+
+  .covenant-charter-card {
+    max-width: 100%;
+  }
 }
 
-.signup-form {
-    display: flex;
-    flex-direction: column;
-}
+@media (max-width: 600px) {
+  .auth-cohort-pill {
+    display: none;
+  }
 
-.field-label {
-    font-size: 13px;
-    color: #4a463d;
-    margin-bottom: 6px;
-}
+  .covenant-charter-card {
+    padding: 18px 14px;
+  }
 
-.field-input {
-    width: 100%;
-    padding: 14px 16px;
-    margin-bottom: 18px;
-    border: 1px solid #e4ddce;
-    border-radius: 10px;
-    font-size: 15px;
-    background: #ffffff;
-    color: #211f1c;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.field-input:focus {
-    border-color: #c1602e;
-}
-
-.field-input::placeholder {
-    color: transparent;
-    opacity: 0;
-}
-
-.dev-otp-notice {
-    margin: -4px 0 12px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: #f4e5d2;
-    color: #6b3b1e;
-    font-size: 13px;
-}
-
-.otp-note {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    font-size: 13px;
-    color: #6b6558;
-    margin-bottom: 26px;
-}
-
-.otp-icon {
-    color: #5c6b3f;
-    font-size: 14px;
-}
-
-/* ---------- Buttons ---------- */
-
-.signup-actions {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-}
-
-.signup-actions .btn {
-    width: auto;
-    text-align: center;
-}
-
-.btn {
-    display: inline-block;
-    text-decoration: none;
-    text-align: center;
-    border: none;
-    cursor: pointer;
-    border-radius: 25px;
-    font-weight: 600;
-    font-size: 15px;
-    padding: 13px 26px;
-    transition: all 0.2s ease-in-out;
-}
-
-.btn-primary {
-    background: #c1602e;
-    color: #ffffff;
-}
-
-.btn-primary:hover {
-    background: #a8511f;
-}
-
-.btn-outline {
-    background: transparent;
-    color: #211f1c;
-    border: 1px solid #e4ddce;
-}
-
-.btn-outline:hover {
-    background: #f1ebdd;
-}
-
-.new-user-link {
-    font-size: 14px;
-    color: #6b6558;
-    text-decoration: none;
-}
-
-.new-user-link:hover {
-    text-decoration: underline;
-}
-
-/* ---------- Responsive ---------- */
-
-@media (max-width: 800px) {
-    .signup-section {
-        flex-direction: column;
-    }
-
-    .signup-form-panel,
-    .signup-photo {
-        width: 100%;
-        min-height: auto;
-    }
-
-    .signup-photo {
-        padding: 24px;
-    }
-
-    .signup-photo-top {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .signup-photo-content {
-        text-align: left;
-        max-width: 100%;
-    }
-
-    .signup-form-panel {
-        padding: 40px 24px;
-        box-shadow: none;
-    }
-
-    .signup-actions {
-        width: 100%;
-    }
-
-    .new-user-link {
-        width: 100%;
-        text-align: center;
-        margin-top: 4px;
-    }
-
-    .scroll-icon {
-        display: none;
-    }
+  .covenant-rule-item {
+    padding: 8px 10px;
+  }
 }
