@@ -139,21 +139,6 @@ const MockRoom = () => {
         if (!isMounted) return;
         applySessionPayload(payload);
         const endsAt = payload?.session?.endsAt;
-        if (endsAt && Date.parse(endsAt) <= Date.now()) {
-          try {
-            const overview = await getPeerEvaluations(sessionId);
-            if (isMounted && overview) {
-              setPeerEvaluation(overview);
-              if (overview.available || location.state?.assignmentId) {
-                setTimeRemaining(0);
-                setPhase('closed');
-              }
-            }
-          } catch (evalError) {
-            console.error('Unable to check peer evaluations on mount:', evalError);
-          }
-        }
-        const endsAt = payload?.session?.endsAt;
         if (
           (endsAt && Date.parse(endsAt) <= Date.now())
           || location.state?.assignmentId
@@ -483,44 +468,8 @@ const MockRoom = () => {
     if (
       !assignmentId
       || restoredAssignmentRef.current === assignmentId
+      || !peerEvaluation?.available
     ) return;
-    if (activePeerAssignment?.assignmentId === assignmentId) {
-      restoredAssignmentRef.current = assignmentId;
-      return;
-    }
-    let isCurrent = true;
-    setPeerEvaluationLoading(true);
-    setPeerEvaluationError('');
-    void getPeerEvaluation(sessionId, assignmentId).then((evaluation) => {
-      if (!isCurrent) return true;
-      setActivePeerAssignment(evaluation);
-      const savedScores = Object.fromEntries(
-        evaluation.questions.map((question) => [question.id, '']),
-      );
-      evaluation.rubricScores.forEach((score) => {
-        if (Object.hasOwn(savedScores, score.questionId)) {
-          savedScores[score.questionId] = String(score.score);
-        }
-      });
-      setEvaluationScores(savedScores);
-      setEvaluationComments(evaluation.comments || '');
-      setPhase('closed');
-      setTimeRemaining(0);
-      return true;
-    }).catch((loadError) => {
-      if (!isCurrent) return false;
-      console.error('Unable to restore peer evaluation:', loadError);
-      setPeerEvaluationError(loadError?.message || 'Unable to restore this peer evaluation.');
-      return false;
-    }).then((restored) => {
-      if (restored && isCurrent) restoredAssignmentRef.current = assignmentId;
-      if (isCurrent) setPeerEvaluationLoading(false);
-    });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [activePeerAssignment, location.state, sessionId]);
     const assignment = peerEvaluation.assignments.find((item) => item.id === assignmentId);
     if (!assignment) return;
     void handleOpenPeerAssignment(assignment).then((restored) => {
