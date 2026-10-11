@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
     completePomodoroSession,
@@ -20,8 +20,7 @@ import {
 import { completeDailyGoal, getTodayDailyGoals } from '../../services/dailyGoalService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import { X, Check, FileText, ArrowRight, HelpCircle } from 'lucide-react';
-import './Studyroom.css';
+import { X, Check } from 'lucide-react';
 import './Studyroom.css';
 
 const STATUS_LABEL = {
@@ -32,7 +31,8 @@ const STATUS_LABEL = {
 
 const STATUS_CYCLE = ['studying', 'break', 'away'];
 
-const FOCUS_MINUTES = 25;
+const DEFAULT_STUDY_MINUTES = 20;
+const BREAK_MINUTES = 5;
 
 const createMessageId = () => (
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -81,7 +81,9 @@ const StudyRoom = () => {
     const [customQuestionPaper, setCustomQuestionPaper] = useState(null);
 
     const [myStatus, setMyStatus] = useState('studying');
-    const [secondsLeft, setSecondsLeft] = useState(FOCUS_MINUTES * 60);
+    const [studyMinutes, setStudyMinutes] = useState(DEFAULT_STUDY_MINUTES);
+    const [timerPhase, setTimerPhase] = useState('study');
+    const [secondsLeft, setSecondsLeft] = useState(DEFAULT_STUDY_MINUTES * 60);
     const [isRunning, setIsRunning] = useState(false);
     const [messages, setMessages] = useState([]);
     const [draft, setDraft] = useState('');
@@ -474,15 +476,23 @@ const StudyRoom = () => {
         }
     };
 
-    const getFocusedDuration = () => {
+    const getFocusedDuration = useCallback(() => {
         const runningSeconds = startedAtRef.current
             ? Math.floor((Date.now() - startedAtRef.current) / 1000)
             : 0;
 
         return Math.min(
-            FOCUS_MINUTES * 60,
+            studyMinutes * 60,
             accumulatedFocusedSecondsRef.current + runningSeconds,
         );
+    }, [studyMinutes]);
+
+    const handleStudyDurationChange = (minutes) => {
+        const val = Math.max(1, Math.min(180, Number(minutes) || DEFAULT_STUDY_MINUTES));
+        setStudyMinutes(val);
+        if (!isRunning && timerPhase === 'study') {
+            setSecondsLeft(val * 60);
+        }
     };
 
     useEffect(() => {
@@ -491,41 +501,73 @@ const StudyRoom = () => {
         }
 
         const updateCountdown = () => {
-            const elapsedSeconds = getFocusedDuration();
-            const remainingSeconds = Math.max(
-                0,
-                FOCUS_MINUTES * 60 - elapsedSeconds,
-            );
+            if (timerPhase === 'study') {
+                const elapsedSeconds = getFocusedDuration();
+                const remainingSeconds = Math.max(
+                    0,
+                    studyMinutes * 60 - elapsedSeconds,
+                );
 
-            setSecondsLeft(remainingSeconds);
+                setSecondsLeft(remainingSeconds);
 
-            if (remainingSeconds === 0) {
-                clearInterval(intervalRef.current);
-                startedAtRef.current = null;
-                setIsRunning(false);
+                if (remainingSeconds === 0) {
+                    clearInterval(intervalRef.current);
+                    startedAtRef.current = null;
 
-                const currentSessionId = sessionIdRef.current;
-                if (
-                    currentSessionId &&
-                    !completionAttemptedRef.current &&
-                    !operationInProgressRef.current
-                ) {
-                    completionAttemptedRef.current = true;
-                    operationInProgressRef.current = true;
-                    completePomodoroSession(
-                        currentSessionId,
-                        FOCUS_MINUTES * 60,
-                    )
-                        .then(() => {
-                            setSessionStatus('completed');
-                        })
-                        .catch((error) => {
-                            completionAttemptedRef.current = false;
-                            setPomodoroError(error.message);
-                        })
-                        .finally(() => {
-                            operationInProgressRef.current = false;
-                        });
+                    const currentSessionId = sessionIdRef.current;
+                    if (
+                        currentSessionId &&
+                        !completionAttemptedRef.current &&
+                        !operationInProgressRef.current
+                    ) {
+                        completionAttemptedRef.current = true;
+                        operationInProgressRef.current = true;
+                        completePomodoroSession(
+                            currentSessionId,
+                            studyMinutes * 60,
+                        )
+                            .then(() => {
+                                setSessionStatus('completed');
+                            })
+                            .catch((error) => {
+                                completionAttemptedRef.current = false;
+                                setPomodoroError(error.message);
+                            })
+                            .finally(() => {
+                                operationInProgressRef.current = false;
+                            });
+                    }
+
+                    // Switch to 5-minute fixed break
+                    setTimerPhase('break');
+                    setSecondsLeft(BREAK_MINUTES * 60);
+                    startedAtRef.current = Date.now();
+                    accumulatedFocusedSecondsRef.current = 0;
+                }
+            } else {
+                // Break countdown (fixed 5 minutes)
+                const runningBreakSeconds = startedAtRef.current
+                    ? Math.floor((Date.now() - startedAtRef.current) / 1000)
+                    : 0;
+                const remainingBreakSeconds = Math.max(
+                    0,
+                    BREAK_MINUTES * 60 - runningBreakSeconds,
+                );
+
+                setSecondsLeft(remainingBreakSeconds);
+
+                if (remainingBreakSeconds === 0) {
+                    clearInterval(intervalRef.current);
+                    startedAtRef.current = null;
+                    // Return to study state with user's selected study duration
+                    setTimerPhase('study');
+                    setSecondsLeft(studyMinutes * 60);
+                    setIsRunning(false);
+                    setSessionId(null);
+                    sessionIdRef.current = null;
+                    setSessionStatus(null);
+                    accumulatedFocusedSecondsRef.current = 0;
+                    completionAttemptedRef.current = false;
                 }
             }
         };
@@ -534,7 +576,7 @@ const StudyRoom = () => {
         intervalRef.current = setInterval(updateCountdown, 1000);
 
         return () => clearInterval(intervalRef.current);
-    }, [isRunning]);
+    }, [isRunning, timerPhase, studyMinutes, getFocusedDuration]);
 
     const formatTime = (secs) => {
         const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -555,47 +597,61 @@ const StudyRoom = () => {
 
         try {
             if (isRunning) {
-                const currentFocusedDuration = getFocusedDuration();
-                setIsRunning(false);
-                startedAtRef.current = null;
-                setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
-                setSessionStatus('paused');
+                if (timerPhase === 'study') {
+                    const currentFocusedDuration = getFocusedDuration();
+                    setIsRunning(false);
+                    startedAtRef.current = null;
+                    setSecondsLeft(studyMinutes * 60 - currentFocusedDuration);
+                    setSessionStatus('paused');
 
-                await updatePomodoroSession(sessionIdRef.current, {
-                    status: 'paused',
-                    focusedDurationSeconds: currentFocusedDuration,
-                });
+                    if (sessionIdRef.current) {
+                        await updatePomodoroSession(sessionIdRef.current, {
+                            status: 'paused',
+                            focusedDurationSeconds: currentFocusedDuration,
+                        });
+                    }
 
-                accumulatedFocusedSecondsRef.current = currentFocusedDuration;
+                    accumulatedFocusedSecondsRef.current = currentFocusedDuration;
+                } else {
+                    // Pausing during break
+                    setIsRunning(false);
+                    startedAtRef.current = null;
+                }
                 return;
             }
 
-            let currentSessionId = sessionIdRef.current;
-            let currentFocusedDuration = accumulatedFocusedSecondsRef.current;
+            if (timerPhase === 'study') {
+                let currentSessionId = sessionIdRef.current;
+                let currentFocusedDuration = accumulatedFocusedSecondsRef.current;
 
-            if (sessionStatus === 'paused' && currentSessionId) {
-                await updatePomodoroSession(currentSessionId, {
-                    status: 'active',
-                    focusedDurationSeconds: currentFocusedDuration,
-                });
+                if (sessionStatus === 'paused' && currentSessionId) {
+                    await updatePomodoroSession(currentSessionId, {
+                        status: 'active',
+                        focusedDurationSeconds: currentFocusedDuration,
+                    });
+                } else {
+                    const session = await createPomodoroSession(
+                        roomId,
+                        studyMinutes * 60,
+                    );
+                    currentSessionId = session.id;
+                    setSessionId(currentSessionId);
+                    sessionIdRef.current = currentSessionId;
+                    currentFocusedDuration = 0;
+                    accumulatedFocusedSecondsRef.current = 0;
+                    completionAttemptedRef.current = false;
+                }
+
+                startedAtRef.current = Date.now();
+                accumulatedFocusedSecondsRef.current = currentFocusedDuration;
+                setSecondsLeft(studyMinutes * 60 - currentFocusedDuration);
+                setSessionStatus('active');
+                setIsRunning(true);
             } else {
-                const session = await createPomodoroSession(
-                    roomId,
-                    FOCUS_MINUTES * 60,
-                );
-                currentSessionId = session.id;
-                setSessionId(currentSessionId);
-                sessionIdRef.current = currentSessionId;
-                currentFocusedDuration = 0;
-                accumulatedFocusedSecondsRef.current = 0;
-                completionAttemptedRef.current = false;
+                // Starting or resuming 5-minute break
+                startedAtRef.current = Date.now() - (BREAK_MINUTES * 60 - secondsLeft) * 1000;
+                setIsRunning(true);
             }
-
-            startedAtRef.current = Date.now();
-            accumulatedFocusedSecondsRef.current = currentFocusedDuration;
-            setSecondsLeft(FOCUS_MINUTES * 60 - currentFocusedDuration);
-            setSessionStatus('active');
-            setIsRunning(true);
         } catch (error) {
             setPomodoroError(error.message);
         } finally {
@@ -615,7 +671,7 @@ const StudyRoom = () => {
 
         try {
             const currentSessionId = sessionIdRef.current || sessionId;
-            if (currentSessionId) {
+            if (currentSessionId && timerPhase === 'study') {
                 await updatePomodoroSession(currentSessionId, {
                     status: 'cancelled',
                     focusedDurationSeconds: currentFocusedDuration,
@@ -627,7 +683,8 @@ const StudyRoom = () => {
             setSessionStatus(null);
             accumulatedFocusedSecondsRef.current = 0;
             completionAttemptedRef.current = false;
-            setSecondsLeft(FOCUS_MINUTES * 60);
+            setTimerPhase('study');
+            setSecondsLeft(studyMinutes * 60);
         } catch (error) {
             setPomodoroError(error.message);
         } finally {
@@ -750,8 +807,12 @@ const StudyRoom = () => {
         }
     };
 
+    const totalPhaseSeconds = timerPhase === 'break' ? BREAK_MINUTES * 60 : studyMinutes * 60;
+    const progressPercent = totalPhaseSeconds > 0
+        ? Math.max(0, Math.min(100, ((totalPhaseSeconds - secondsLeft) / totalPhaseSeconds) * 100))
+        : 0;
+
     const completedGoals = dailyGoals.filter((goal) => goal.isCompleted).length;
-    const progressPercent = (FOCUS_MINUTES * 60 - secondsLeft) / (FOCUS_MINUTES * 60) * 100;
 
     if (roomLoading) {
         return (
@@ -823,7 +884,7 @@ const StudyRoom = () => {
                         title="Click to cycle status: Studying / Break / Away"
                     >
                         <span className={`sr-status-dot sr-status-${myStatus}`}></span>
-                        <span>You • {STATUS_LABEL[myStatus]}</span>
+                        <span>You - {STATUS_LABEL[myStatus]}</span>
                     </button>
 
                     <p className="sr-panel-label">Members ({members.length})</p>
@@ -886,7 +947,7 @@ const StudyRoom = () => {
                         <svg className="sr-timer-ring" viewBox="0 0 120 120">
                             <circle className="sr-ring-bg" cx="60" cy="60" r="52" />
                             <circle
-                                className="sr-ring-progress"
+                                className={`sr-ring-progress ${timerPhase === 'break' ? 'is-break-ring' : ''}`}
                                 cx="60"
                                 cy="60"
                                 r="52"
@@ -895,8 +956,48 @@ const StudyRoom = () => {
                         </svg>
                         <div className="sr-timer-center">
                             <span className="sr-timer-value">{formatTime(secondsLeft)}</span>
-                            <span className="sr-timer-caption">Focus session</span>
+                            <span className={`sr-timer-caption ${timerPhase === 'break' ? 'is-break-caption' : ''}`}>
+                                {timerPhase === 'break' ? 'Break (5:00)' : 'Study Session'}
+                            </span>
                         </div>
+                    </div>
+
+                    <div className="sr-timer-duration-config">
+                        {timerPhase === 'study' ? (
+                            <>
+                                <label className="sr-duration-label-wrap">
+                                    <span className="sr-duration-label">Study Duration</span>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="180"
+                                        value={studyMinutes}
+                                        onChange={(e) => handleStudyDurationChange(e.target.value)}
+                                        disabled={isRunning}
+                                        className="sr-duration-number-input"
+                                        aria-label="Set study duration in minutes"
+                                    />
+                                    <span className="sr-duration-unit">min</span>
+                                </label>
+                                <div className="sr-duration-presets-row">
+                                    {[15, 20, 25, 30, 45, 60].map((mins) => (
+                                        <button
+                                            key={mins}
+                                            type="button"
+                                            className={`sr-duration-preset-chip ${studyMinutes === mins ? 'is-selected' : ''}`}
+                                            onClick={() => handleStudyDurationChange(mins)}
+                                            disabled={isRunning}
+                                        >
+                                            {mins}m
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="sr-break-indicator-badge">
+                                <span>Break: 5:00 (Fixed)</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="sr-timer-controls">
@@ -912,7 +1013,7 @@ const StudyRoom = () => {
                             className="sr-btn sr-btn-primary"
                             onClick={handleStartPause}
                         >
-                            {isRunning ? 'Pause' : 'Start Focus'}
+                            {isRunning ? 'Pause' : (timerPhase === 'break' ? 'Start Break' : 'Start')}
                         </button>
                     </div>
 
@@ -928,35 +1029,25 @@ const StudyRoom = () => {
                     <div className="sr-quick-row">
                         <button
                             type="button"
-                            className="sr-quick-card sr-quick-button"
+                            className="sr-quick-card sr-quick-button sr-create-mock-btn"
                             onClick={() => {
                                 setPaperSelectionError('');
                                 setSelectedPaperId('');
                                 setPaperSource('dataset');
                                 setPaperSearch('');
-                                setExamDurationMinutes('');
+                                setExamDurationMinutes('60');
                                 setCustomQuestionPaper(null);
                                 setShowPaperSelector(true);
                             }}
                         >
-                            <div className="sr-quick-content">
-                                <div className="sr-quick-icon-wrap">
-                                    <FileText size={16} className="sr-quick-icon" />
-                                </div>
-                                <div className="sr-quick-text">
-                                    <span className="sr-quick-title">Start a Mock Test</span>
-                                    <span className="sr-quick-sub">Timed exam practice with peer evaluations</span>
-                                </div>
-                            </div>
-                            <div className="sr-quick-action-badge">
-                                <ArrowRight size={13} className="sr-quick-arrow" />
-                            </div>
+                            <span className="sr-quick-title">CREATE MOCK ROOM</span>
+                            <span className="sr-quick-sub">Timed exam practice with peer evaluations</span>
                         </button>
                     </div>
 
                     <div className="sr-goal-strip">
                         <div className="sr-goal-strip-header">
-                            <span className="sr-goal-strip-title">Today's Goals</span>
+                            <span className="sr-goal-strip-title">My tasks</span>
                             <span className="sr-goal-strip-count">
                                 {completedGoals}/{dailyGoals.length} completed
                             </span>
@@ -994,26 +1085,28 @@ const StudyRoom = () => {
                 </main>
             </div>
 
-                            {/* Floating room Doubt Forum at top, Room Chat directly below */}
-            <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry">
-                <span className="sr-doubt-icon" aria-hidden="true">
-                            <HelpCircle size={18} />
-                        </span>
-                <div>
-                    <span className="sr-doubt-title">Doubt Forum</span>
-                    <span className="sr-doubt-sub">Ask questions & discuss solutions</span>
-                </div>
-            </Link>
+            {/* Floating corner controls: Doubt Forum (?) and Room Chat (💬) */}
+            <div className="sr-floating-corner-controls" role="region" aria-label="Room quick actions">
+                <Link
+                    to={`/doubt-forum/${roomId}`}
+                    className="sr-floating-btn sr-floating-doubt-btn"
+                    aria-label="Open Doubt Forum"
+                    title="Open Doubt Forum (?)"
+                >
+                    <span className="sr-floating-btn-text" aria-hidden="true">?</span>
+                </Link>
 
-            <button
-                type="button"
-                className="sr-chat-toggle"
-                aria-expanded={isChatOpen}
-                onClick={() => setIsChatOpen((open) => !open)}
-            >
-                <span aria-hidden="true">💬</span>
-                {isChatOpen ? 'Hide room chat' : 'Open room chat'}
-            </button>
+                <button
+                    type="button"
+                    className={`sr-floating-btn sr-floating-chat-btn ${isChatOpen ? 'is-active' : ''}`}
+                    aria-label={isChatOpen ? 'Hide room chat' : 'Open room chat'}
+                    aria-expanded={isChatOpen}
+                    title={isChatOpen ? 'Hide room chat' : 'Open room chat (💬)'}
+                    onClick={() => setIsChatOpen((open) => !open)}
+                >
+                    <span className="sr-floating-btn-icon" aria-hidden="true">💬</span>
+                </button>
+            </div>
             {isChatOpen && (
                 <div className="sr-chat">
                     <div className="sr-chat-heading">

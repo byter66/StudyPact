@@ -9,7 +9,6 @@ import {
   Compass,
   Trophy,
   X,
-  RotateCcw,
   LayoutGrid,
   List,
   Clock,
@@ -30,7 +29,6 @@ import {
   getDailyGoalLeaderboard,
   getTodayDailyGoals,
   getDailyGoalStreak,
-  resetDailyGoalStreak,
   updateDailyGoal,
 } from "../../services/dailyGoalService";
 import "../common/Modal.css";
@@ -216,8 +214,6 @@ export default function Dashboard() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState("");
-  const [streakResetting, setStreakResetting] = useState(false);
-  const [streakResetMessage, setStreakResetMessage] = useState("");
   const loadRoomsRequestRef = useRef(0);
 
   const loadRooms = useCallback(async () => {
@@ -290,25 +286,6 @@ export default function Dashboard() {
   useEffect(() => {
     void loadAccountability();
   }, [loadAccountability]);
-
-  const handleResetStreak = async () => {
-    if (streakResetting || !window.confirm("Reset your current streak? This cannot be undone.")) {
-      return;
-    }
-
-    setStreakResetting(true);
-    setStreakResetMessage("");
-    try {
-      await resetDailyGoalStreak();
-      setStreakResetMessage("Your streak was reset.");
-      await loadAccountability();
-    } catch (error) {
-      setStreakResetMessage("Unable to reset your streak. Please try again.");
-      console.error("Unable to reset daily goal streak:", error);
-    } finally {
-      setStreakResetting(false);
-    }
-  };
 
   const toggleDailyGoal = async (goalId) => {
     const goal = dailyGoals.find((item) => item.id === goalId);
@@ -545,21 +522,8 @@ export default function Dashboard() {
               <span className="sp-covenant-lock-hint">
                 <Clock size={12} /> Resets at midnight
               </span>
-              <button
-                type="button"
-                className="sp-reset-streak-link"
-                onClick={handleResetStreak}
-                disabled={streakResetting}
-              >
-                <RotateCcw size={11} />
-                {streakResetting ? "Resetting..." : "Reset streak"}
-              </button>
             </div>
           </div>
-
-          {streakResetMessage && (
-            <div className="sp-notice sp-notice-info">{streakResetMessage}</div>
-          )}
 
           {/* Section 2: The Daily Commitment Register */}
           <div className="sp-commitments-box">
