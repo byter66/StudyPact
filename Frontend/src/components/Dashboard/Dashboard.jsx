@@ -13,8 +13,6 @@ import {
   LayoutGrid,
   List,
   Clock,
-  HelpCircle,
-  FileCheck,
   Check,
   Copy
 } from "lucide-react";
@@ -466,12 +464,6 @@ export default function Dashboard() {
             <span className="sp-station-nav-link active">
               <Compass size={14} /> Study Rooms
             </span>
-            <Link to="/mock-room" className="sp-station-nav-link">
-              <FileCheck size={14} /> Mock Tests
-            </Link>
-            <Link to="/doubt-forum/1" className="sp-station-nav-link">
-              <HelpCircle size={14} /> Doubt Forum
-            </Link>
           </nav>
 
           <form className="sp-station-keyport" onSubmit={handleJoinByCode}>
