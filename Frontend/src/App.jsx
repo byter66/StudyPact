@@ -48,7 +48,22 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/doubt-forum/:id" element={<Doubtforum />} />
+        <Route
+          path="/doubt-forum/:id"
+          element={
+            <ProtectedRoute>
+              <Doubtforum />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doubt-forum/:roomId"
+          element={
+            <ProtectedRoute>
+              <Doubtforum />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

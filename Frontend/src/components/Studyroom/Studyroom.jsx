@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
     completePomodoroSession,
     createPomodoroSession,
+    getRoomPomodoroSessions,
     updatePomodoroSession,
 } from '../../services/pomodoroApi';
+import { getDoubts } from '../../services/doubtService';
 import {
     getRoomById,
     getRoomMembers,
@@ -103,6 +105,102 @@ const StudyRoom = () => {
     const chatMessagesRef = useRef(null);
     const chatWasNearBottomRef = useRef(true);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const [unreadReplyCount, setUnreadReplyCount] = useState(0);
+    const myDoubtIdsRef = useRef(new Set());
+    const seenReplyIdsRef = useRef(new Set());
+
+    // Restore active server-persisted Pomodoro session on mount / return to room
+    useEffect(() => {
+        if (!roomId || !userId) return undefined;
+        let isCurrent = true;
+
+        const restoreActivePomodoroSession = async () => {
+            try {
+                const sessions = await getRoomPomodoroSessions(roomId);
+                if (!isCurrent || !Array.isArray(sessions) || !sessions.length) return;
+
+                const activeSession = sessions.find((s) => s.status === 'active' || s.status === 'paused');
+                if (!activeSession) return;
+
+                const plannedSeconds = activeSession.plannedDurationSeconds || (DEFAULT_STUDY_MINUTES * 60);
+                const plannedMins = Math.max(1, Math.round(plannedSeconds / 60));
+
+                if (activeSession.status === 'active') {
+                    const elapsed = Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 1000);
+                    if (elapsed < plannedSeconds) {
+                        const remaining = plannedSeconds - elapsed;
+                        setStudyMinutes(plannedMins);
+                        setSecondsLeft(remaining);
+                        setSessionId(activeSession.id);
+                        sessionIdRef.current = activeSession.id;
+                        setSessionStatus('active');
+                        startedAtRef.current = new Date(activeSession.startedAt).getTime() - ((activeSession.focusedDurationSeconds || 0) * 1000);
+                        accumulatedFocusedSecondsRef.current = activeSession.focusedDurationSeconds || 0;
+                        setIsRunning(true);
+                    }
+                } else if (activeSession.status === 'paused') {
+                    const focused = activeSession.focusedDurationSeconds || 0;
+                    const remaining = Math.max(0, plannedSeconds - focused);
+                    setStudyMinutes(plannedMins);
+                    setSecondsLeft(remaining);
+                    setSessionId(activeSession.id);
+                    sessionIdRef.current = activeSession.id;
+                    setSessionStatus('paused');
+                    accumulatedFocusedSecondsRef.current = focused;
+                    setIsRunning(false);
+                }
+            } catch (error) {
+                console.error('Unable to restore pomodoro session:', error);
+            }
+        };
+
+        void restoreActivePomodoroSession();
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [roomId, userId]);
+
+    // Check for unread replies to the current user's doubts
+    useEffect(() => {
+        if (!roomId || !userId) return undefined;
+        let isCurrent = true;
+
+        const checkUnreadReplies = async () => {
+            try {
+                const doubts = await getDoubts(roomId);
+                if (!isCurrent || !Array.isArray(doubts)) return;
+
+                const myDoubts = doubts.filter((d) => d.userId === userId);
+                myDoubtIdsRef.current = new Set(myDoubts.map((d) => d.id));
+
+                const lastReadStr = localStorage.getItem(`doubt_last_read_${userId}_${roomId}`);
+                const lastReadTime = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+
+                let unread = 0;
+                for (const doubt of myDoubts) {
+                    for (const reply of doubt.replies || []) {
+                        if (reply.id) seenReplyIdsRef.current.add(reply.id);
+                        if (reply.userId !== userId && new Date(reply.createdAt).getTime() > lastReadTime) {
+                            unread += 1;
+                        }
+                    }
+                }
+
+                if (isCurrent) {
+                    setUnreadReplyCount(unread);
+                }
+            } catch {
+                // Non-fatal
+            }
+        };
+
+        void checkUnreadReplies();
+
+        return () => {
+            isCurrent = false;
+        };
+    }, [roomId, userId]);
 
     useEffect(() => {
         const loadAvailablePapers = async () => {
@@ -297,7 +395,23 @@ const StudyRoom = () => {
                                 },
                             ];
                         });
-                        });
+                        })
+                        .on(
+                            'postgres_changes',
+                            {
+                                event: 'INSERT',
+                                schema: 'public',
+                                table: 'doubt_replies',
+                            },
+                            ({ new: newReply }) => {
+                                if (!isCurrent || !newReply?.id || newReply.user_id === userId) return;
+                                if (seenReplyIdsRef.current.has(newReply.id)) return;
+                                seenReplyIdsRef.current.add(newReply.id);
+                                if (myDoubtIdsRef.current.has(newReply.doubt_id)) {
+                                    setUnreadReplyCount((prev) => prev + 1);
+                                }
+                            },
+                        );
 
                     channel.subscribe(async (status) => {
                         if (!isCurrent) return;
@@ -1092,8 +1206,19 @@ const StudyRoom = () => {
                     className="sr-floating-btn sr-floating-doubt-btn"
                     aria-label="Open Doubt Forum"
                     title="Open Doubt Forum (?)"
+                    onClick={() => {
+                        if (userId && roomId) {
+                            localStorage.setItem(`doubt_last_read_${userId}_${roomId}`, new Date().toISOString());
+                            setUnreadReplyCount(0);
+                        }
+                    }}
                 >
                     <span className="sr-floating-btn-text" aria-hidden="true">?</span>
+                    {unreadReplyCount > 0 && (
+                        <span className="sr-doubt-badge" aria-label={`${unreadReplyCount} unread replies`}>
+                            {unreadReplyCount > 99 ? '99+' : unreadReplyCount}
+                        </span>
+                    )}
                 </Link>
 
                 <button
