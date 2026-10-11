@@ -62,6 +62,7 @@ const DoubtForum = () => {
     const [postError, setPostError] = useState('');
     const [replyDrafts, setReplyDrafts] = useState({});
     const [openReplyId, setOpenReplyId] = useState(null);
+    const channelRef = useRef(null);
     const realtimeRetryTimerRef = useRef(null);
     const realtimeRetryCountRef = useRef(0);
 
@@ -100,30 +101,38 @@ const DoubtForum = () => {
                 .on(
                     'postgres_changes',
                     {
-                        event: 'INSERT',
+                        event: '*',
                         schema: 'public',
                         table: 'doubts',
                         filter: `room_id=eq.${id}`,
                     },
                     ({ new: newDoubt }) => {
-                        if (!newDoubt?.id) return;
-                        void replaceDoubtFromServer(newDoubt.id);
+                        void replaceDoubtFromServer(newDoubt?.id);
                     },
                 )
                 .on(
                     'postgres_changes',
                     {
-                        event: 'INSERT',
+                        event: '*',
                         schema: 'public',
                         table: 'doubt_replies',
                     },
                     ({ new: newReply }) => {
-                        if (!newReply?.id || !newReply.doubt_id) return;
-                        void replaceDoubtFromServer(newReply.doubt_id);
+                        void replaceDoubtFromServer(newReply?.doubt_id);
                     },
-                );
+                )
+                .on('broadcast', { event: 'doubt-posted' }, ({ payload }) => {
+                    void replaceDoubtFromServer(payload?.doubtId);
+                })
+                .on('broadcast', { event: 'doubt-updated' }, ({ payload }) => {
+                    void replaceDoubtFromServer(payload?.doubtId);
+                })
+                .on('broadcast', { event: 'reply-added' }, ({ payload }) => {
+                    void replaceDoubtFromServer(payload?.doubtId);
+                });
 
             channel = subscribedChannel;
+            channelRef.current = subscribedChannel;
             subscribedChannel.subscribe((status) => {
                 if (!isCurrent) return;
 
@@ -186,6 +195,7 @@ const DoubtForum = () => {
             }
             realtimeRetryTimerRef.current = null;
             realtimeRetryCountRef.current = 0;
+            channelRef.current = null;
             if (channel) {
                 void supabase?.removeChannel(channel);
             }
@@ -203,7 +213,8 @@ const DoubtForum = () => {
         try {
             const doubt = await createDoubt(id, content);
             let images = [];
-            if (draftImages.length > 0) {
+            const hasImages = draftImages.length > 0;
+            if (hasImages) {
                 setUploading(true);
                 const imagePayloads = await Promise.all(draftImages.map(readImage));
                 images = await uploadDoubtImages(id, doubt.id, imagePayloads);
@@ -218,6 +229,13 @@ const DoubtForum = () => {
             }, ...prev]);
             setDraftText('');
             setDraftImages([]);
+            void channelRef.current?.send({
+                type: 'broadcast',
+                event: hasImages ? 'doubt-updated' : 'doubt-posted',
+                payload: { doubtId: doubt.id },
+            })?.catch((broadcastError) => {
+                console.error('Unable to broadcast doubt:', broadcastError);
+            });
         } catch (error) {
             setPostError(error.message || 'Unable to post your doubt.');
         } finally {
@@ -274,6 +292,13 @@ const DoubtForum = () => {
             );
             setReplyDrafts((prev) => ({ ...prev, [doubtId]: '' }));
             setOpenReplyId(null);
+            void channelRef.current?.send({
+                type: 'broadcast',
+                event: 'reply-added',
+                payload: { doubtId },
+            })?.catch((broadcastError) => {
+                console.error('Unable to broadcast doubt reply:', broadcastError);
+            });
         } catch (error) {
             setPostError(error.message || 'Unable to post your reply.');
         } finally {

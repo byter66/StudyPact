@@ -93,7 +93,7 @@
 
 .sr-body {
     display: grid;
-    grid-template-columns: 22% 1fr 26%;
+    grid-template-columns: minmax(260px, 22%) 1fr;
     gap: 16px;
     flex: 1;
     min-height: 0;
@@ -224,6 +224,7 @@
     align-items: center;
     justify-content: flex-start;
     padding-top: 20px;
+    overflow-y: auto;
 }
 
 .sr-timer-wrapper {
@@ -752,13 +753,6 @@ a.sr-quick-card:hover {
     text-decoration-color: #a9c19a;
 }
 
-/* ---------- Side panel (chat) ---------- */
-
-.sr-side-panel {
-    gap: 14px;
-    min-width: 0;
-    overflow: hidden;
-}
 
 .sr-focus-duration {
     display: inline-flex;

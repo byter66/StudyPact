@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../config/supabase";
+import { getCalendarDateInIst, getPreviousCalendarDate } from "../utils/istDate";
 import { CommitmentPlan, DailyGoal } from "../types/accountability.types";
 import {
   AuthenticatedDailyGoalRequest,
@@ -19,7 +20,7 @@ const toDailyGoal = (row: DailyGoalRow): DailyGoal =>
     row.is_completed
   );
 
-const getToday = (): string => new Date().toISOString().slice(0, 10);
+const getToday = (): string => getCalendarDateInIst();
 const isMissingResetTable = (error: { code?: string; message?: string } | null): boolean =>
   error?.code === "PGRST205" || error?.message?.includes("daily_goal_streak_resets") === true;
 
@@ -178,11 +179,7 @@ export const completeDailyGoal = async (
   return toDailyGoal(data as DailyGoalRow);
 };
 
-const getPreviousDate = (date: string): string => {
-  const previousDate = new Date(`${date}T00:00:00.000Z`);
-  previousDate.setUTCDate(previousDate.getUTCDate() - 1);
-  return previousDate.toISOString().slice(0, 10);
-};
+const getPreviousDate = (date: string): string => getPreviousCalendarDate(date);
 
 const isCompletedDay = (userId: string, goals: DailyGoalRow[]): boolean => {
   if (!goals.length) return false;

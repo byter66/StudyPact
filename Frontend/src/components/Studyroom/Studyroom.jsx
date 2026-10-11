@@ -20,7 +20,7 @@ import {
 import { completeDailyGoal, getTodayDailyGoals } from '../../services/dailyGoalService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
-import './StudyRoom.css';
+import './Studyroom.css';
 
 const STATUS_LABEL = {
     studying: 'Studying',
@@ -164,7 +164,7 @@ const StudyRoom = () => {
     useEffect(() => {
         let isCurrent = true;
         let channel = null;
-        let roomMembers = [];
+        let knownMemberNames = new Map();
         let memberRequestId = 0;
         let reconnectTimer = null;
         let reconnectAttempts = 0;
@@ -179,7 +179,7 @@ const StudyRoom = () => {
                     if (!presence.user_id || activeMembers.has(presence.user_id)) return;
                     activeMembers.set(presence.user_id, {
                         id: presence.user_id,
-                        name: presence.display_name || 'StudyPact member',
+                        name: presence.display_name || knownMemberNames.get(presence.user_id) || 'StudyPact member',
                         status: STATUS_CYCLE.includes(presence.status)
                             ? presence.status
                             : 'studying',
@@ -187,14 +187,15 @@ const StudyRoom = () => {
                 });
             }
 
-            const membersById = new Map(
-                roomMembers.map((member) => [
-                    member.id,
-                    activeMembers.get(member.id) || member,
-                ]),
-            );
-            activeMembers.forEach((member, id) => membersById.set(id, member));
-            setMembers([...membersById.values()]);
+            if (userId && !activeMembers.has(userId) && presenceSubscribedRef.current) {
+                activeMembers.set(userId, {
+                    id: userId,
+                    name: presenceDisplayName,
+                    status: myStatusRef.current || 'studying',
+                });
+            }
+
+            setMembers([...activeMembers.values()]);
         };
 
         const refreshMembers = async () => {
@@ -205,11 +206,9 @@ const StudyRoom = () => {
                 if (!isCurrent || requestId !== memberRequestId) return;
 
                 setMemberError('');
-                roomMembers = fetchedMembers.map((member) => ({
-                    id: member.userId,
-                    name: member.displayName,
-                    status: 'away',
-                }));
+                knownMemberNames = new Map(
+                    fetchedMembers.map((member) => [member.userId, member.displayName]),
+                );
                 syncPresence();
             } catch (error) {
                 if (isCurrent) {
@@ -222,7 +221,6 @@ const StudyRoom = () => {
         const handlePresenceChange = () => {
             if (!isCurrent) return;
             syncPresence();
-            void refreshMembers();
         };
 
         const loadRoom = async () => {
@@ -357,7 +355,8 @@ const StudyRoom = () => {
             presenceSubscribedRef.current = false;
             presenceChannelRef.current = null;
             if (channel) {
-                supabase?.removeChannel(channel);
+                void channel.untrack().catch(() => {});
+                void supabase?.removeChannel(channel);
             }
         };
     }, [roomId, userId, presenceDisplayName]);
@@ -444,6 +443,21 @@ const StudyRoom = () => {
         if (leaving) return;
         setLeaving(true);
         try {
+            if (presenceChannelRef.current) {
+                try {
+                    await presenceChannelRef.current.untrack();
+                } catch (untrackErr) {
+                    console.error('Unable to untrack presence on leave:', untrackErr);
+                }
+                try {
+                    await supabase?.removeChannel(presenceChannelRef.current);
+                } catch (removeErr) {
+                    console.error('Unable to remove channel on leave:', removeErr);
+                }
+                presenceChannelRef.current = null;
+                presenceSubscribedRef.current = false;
+            }
+            setMembers((current) => current.filter((m) => m.id !== userId));
             await leaveRoom(roomId);
             navigate('/dashboard');
         } catch (error) {
@@ -960,67 +974,66 @@ const StudyRoom = () => {
                         </div>
                     </div>
                 </main>
-
-                {/* Right: chat + doubt forum */}
-                <aside className="sr-panel sr-side-panel">
-                    <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry sr-floating-forum" aria-label="Open Doubt Forum">
-                        <span className="sr-doubt-icon">💬</span>
-                        <div>
-                            <span className="sr-doubt-title">Doubt Forum</span>
-                            <span className="sr-doubt-sub">3 open threads</span>
-                        </div>
-                    </Link>
-
-                    <button
-                        type="button"
-                        className="sr-chat-toggle"
-                        aria-expanded={isChatOpen}
-                        onClick={() => setIsChatOpen((open) => !open)}
-                    >
-                        <span aria-hidden="true">💬</span>
-                        {isChatOpen ? 'Hide room chat' : 'Open room chat'}
-                    </button>
-                    {isChatOpen && <div className="sr-chat">
-                        <div className="sr-chat-heading">
-                            <p className="sr-panel-label">Room chat</p>
-                            <button type="button" className="sr-chat-close" onClick={() => setIsChatOpen(false)} aria-label="Close room chat">×</button>
-                        </div>
-                        <div
-                            ref={chatMessagesRef}
-                            className="sr-chat-messages"
-                            onScroll={(event) => {
-                                const element = event.currentTarget;
-                                const distanceFromBottom =
-                                    element.scrollHeight
-                                    - element.scrollTop
-                                    - element.clientHeight;
-                                chatWasNearBottomRef.current = distanceFromBottom <= 100;
-                            }}
-                        >
-                            {messages.map((m) => (
-                                <div
-                                    key={m.id}
-                                    className={`sr-chat-message ${m.author === 'You' ? 'sr-chat-mine' : ''}`}
-                                >
-                                    <span className="sr-chat-author">{m.author}</span>
-                                    <span className="sr-chat-text">{m.text}</span>
-                                </div>
-                            ))}
-                        </div>
-                        <form className="sr-chat-form" onSubmit={sendMessage}>
-                            <input
-                                type="text"
-                                value={draft}
-                                onChange={(e) => setDraft(e.target.value)}
-                                placeholder="Message the room..."
-                                className="sr-chat-input"
-                            />
-                            <button type="submit" className="sr-chat-send">Send</button>
-                        </form>
-                    </div>}
-                </aside>
-
             </div>
+
+            {/* Floating room chat + doubt forum */}
+            <Link to={`/doubt-forum/${roomId}`} className="sr-doubt-entry sr-floating-forum" aria-label="Open Doubt Forum">
+                <span className="sr-doubt-icon">💬</span>
+                <div>
+                    <span className="sr-doubt-title">Doubt Forum</span>
+                    <span className="sr-doubt-sub">3 open threads</span>
+                </div>
+            </Link>
+
+            <button
+                type="button"
+                className="sr-chat-toggle"
+                aria-expanded={isChatOpen}
+                onClick={() => setIsChatOpen((open) => !open)}
+            >
+                <span aria-hidden="true">💬</span>
+                {isChatOpen ? 'Hide room chat' : 'Open room chat'}
+            </button>
+            {isChatOpen && (
+                <div className="sr-chat">
+                    <div className="sr-chat-heading">
+                        <p className="sr-panel-label">Room chat</p>
+                        <button type="button" className="sr-chat-close" onClick={() => setIsChatOpen(false)} aria-label="Close room chat">×</button>
+                    </div>
+                    <div
+                        ref={chatMessagesRef}
+                        className="sr-chat-messages"
+                        onScroll={(event) => {
+                            const element = event.currentTarget;
+                            const distanceFromBottom =
+                                element.scrollHeight
+                                - element.scrollTop
+                                - element.clientHeight;
+                            chatWasNearBottomRef.current = distanceFromBottom <= 100;
+                        }}
+                    >
+                        {messages.map((m) => (
+                            <div
+                                key={m.id}
+                                className={`sr-chat-message ${m.author === 'You' ? 'sr-chat-mine' : ''}`}
+                            >
+                                <span className="sr-chat-author">{m.author}</span>
+                                <span className="sr-chat-text">{m.text}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <form className="sr-chat-form" onSubmit={sendMessage}>
+                        <input
+                            type="text"
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            placeholder="Message the room..."
+                            className="sr-chat-input"
+                        />
+                        <button type="submit" className="sr-chat-send">Send</button>
+                    </form>
+                </div>
+            )}
 
             {showPaperSelector && (
                 <div
