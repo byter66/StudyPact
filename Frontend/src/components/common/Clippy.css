@@ -1,0 +1,115 @@
+.clippy-guide {
+  position: fixed;
+  left: 22px;
+  bottom: 22px;
+  z-index: 95;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  font-family: var(--font-sans, "Plus Jakarta Sans", sans-serif);
+}
+
+.clippy-character {
+  width: 72px;
+  min-height: 90px;
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-terracotta, #BA4A2B);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  filter: drop-shadow(0 2px 2px rgba(20, 23, 21, 0.16));
+  animation: clippy-idle 4s ease-in-out infinite;
+}
+
+.clippy-character:hover,
+.clippy-character:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 3px 4px rgba(20, 23, 21, 0.23));
+}
+
+.clippy-clip {
+  width: 52px;
+  height: 69px;
+  overflow: visible;
+}
+
+.clippy-eye { fill: #343a35; }
+.clippy-smile {
+  fill: none;
+  stroke: #343a35;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.clippy-name {
+  color: var(--text-muted, #7A756D);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.clippy-bubble {
+  position: relative;
+  width: min(238px, calc(100vw - 112px));
+  margin-bottom: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-hairline, #E6E1D6);
+  border-radius: 13px;
+  background: #FFFDF8;
+  color: var(--text-main, #141715);
+  box-shadow: 0 5px 18px rgba(20, 23, 21, 0.12);
+}
+
+.clippy-bubble::after {
+  content: "";
+  position: absolute;
+  right: 20px;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  border-right: 1px solid var(--border-hairline, #E6E1D6);
+  border-bottom: 1px solid var(--border-hairline, #E6E1D6);
+  background: #FFFDF8;
+  transform: rotate(45deg);
+}
+
+.clippy-bubble p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.clippy-next {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-terracotta, #BA4A2B);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@keyframes clippy-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@media (max-width: 700px) {
+  .clippy-guide { left: 12px; bottom: 12px; gap: 7px; }
+  .clippy-character { width: 62px; min-height: 78px; }
+  .clippy-clip { width: 44px; height: 59px; }
+  .clippy-bubble { width: min(220px, calc(100vw - 88px)); padding: 10px 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clippy-character { animation: none; }
+}

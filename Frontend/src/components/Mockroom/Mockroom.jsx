@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { HelpCircle } from 'lucide-react';
+import Clippy from '../common/Clippy';
 import { useAuth } from '../../context/AuthContext';
 import {
   getPeerEvaluation,
@@ -980,6 +981,7 @@ const MockRoom = () => {
           </section>
         )}
       </div>
+      <Clippy context={activePeerAssignment ? 'evaluation' : 'mockRoom'} />
     </div>
   );
 };

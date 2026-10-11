@@ -7,6 +7,7 @@ import {
     uploadDoubtImages,
 } from '../../services/doubtService';
 import { supabase } from '../../services/supabaseClient';
+import Clippy from '../common/Clippy';
 import './Doubtforum.css';
 
 const MAX_IMAGE_COUNT = 3;
@@ -567,6 +568,7 @@ function DoubtForumInner() {
                     </div>
                 </div>
             )}
+            <Clippy context="doubtForum" />
         </div>
     );
 }

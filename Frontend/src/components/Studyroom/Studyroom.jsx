@@ -22,6 +22,7 @@ import {
 import { completeDailyGoal, getTodayDailyGoals } from '../../services/dailyGoalService';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../context/AuthContext';
+import Clippy from '../common/Clippy';
 import { X, Check } from 'lucide-react';
 import './Studyroom.css';
 
@@ -1500,6 +1501,7 @@ const StudyRoom = () => {
                     </section>
                 </div>
             )}
+            <Clippy context="studyRoom" />
         </div>
     );
 };

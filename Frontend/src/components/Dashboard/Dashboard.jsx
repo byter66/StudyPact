@@ -16,6 +16,7 @@ import {
   Copy
 } from "lucide-react";
 import RoomCard, { CreateRoomCard } from "../RoomCard/RoomCard";
+import Clippy from "../common/Clippy";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../services/apiClient";
 import {
@@ -921,6 +922,7 @@ export default function Dashboard() {
           onCreate={handleCreateRoom}
         />
       )}
+      <Clippy context="dashboard" />
     </div>
   );
 }
