@@ -79,8 +79,6 @@ const StudyRoom = () => {
     const [creatingMockSession, setCreatingMockSession] = useState(false);
     const [paperSource, setPaperSource] = useState('dataset');
     const [paperSearch, setPaperSearch] = useState('');
-    const [examDurationMinutes, setExamDurationMinutes] = useState('60');
-    const [durationOption, setDurationOption] = useState('60');
     const [customQuestionPaper, setCustomQuestionPaper] = useState(null);
 
     const [myStatus, setMyStatus] = useState('studying');
@@ -809,11 +807,6 @@ const StudyRoom = () => {
 
     const handleCreateMockSession = async () => {
         if (!roomId) return;
-        const duration = Number(examDurationMinutes);
-        if (!Number.isInteger(duration) || duration < 1 || duration > 1440) {
-            setPaperSelectionError('Please choose a valid exam duration between 1 minute and 24 hours (1440 minutes).');
-            return;
-        }
         if (paperSource === 'dataset' && !selectedPaperId) {
             setPaperSelectionError('Please select a dataset question paper.');
             return;
@@ -830,7 +823,7 @@ const StudyRoom = () => {
                 roomId,
                 paperSource === 'dataset' ? selectedPaperId : null,
                 {
-                    durationSeconds: duration * 60,
+                    durationSeconds: 60 * 60,
                     customPaper: paperSource === 'custom' ? customQuestionPaper : null,
                 },
             );
@@ -1150,7 +1143,6 @@ const StudyRoom = () => {
                                 setSelectedPaperId('');
                                 setPaperSource('dataset');
                                 setPaperSearch('');
-                                setExamDurationMinutes('60');
                                 setCustomQuestionPaper(null);
                                 setShowPaperSelector(true);
                             }}
@@ -1368,7 +1360,6 @@ const StudyRoom = () => {
                                                         className={`sr-dataset-paper-option ${selectedPaperId === paper.id ? 'sr-dataset-paper-option-selected' : ''}`}
                                                         onClick={() => {
                                                             setSelectedPaperId(paper.id);
-                                                            if (paper.durationMinutes) setExamDurationMinutes(String(paper.durationMinutes));
                                                         }}
                                                         disabled={creatingMockSession}
                                                     >
@@ -1418,57 +1409,6 @@ const StudyRoom = () => {
                                 </div>
                             )}
 
-                            <div className="sr-form-group">
-                                <label className="sr-paper-select-label" htmlFor="mock-exam-duration">
-                                    Exam Duration
-                                </label>
-                                <div className="sr-duration-presets" role="radiogroup" aria-label="Exam duration options">
-                                    {[15, 30, 45, 60, 90].map((mins) => (
-                                        <button
-                                            type="button"
-                                            key={mins}
-                                            className={`sr-duration-pill ${durationOption === String(mins) ? 'is-active' : ''}`}
-                                            onClick={() => {
-                                                setDurationOption(String(mins));
-                                                setExamDurationMinutes(String(mins));
-                                            }}
-                                            disabled={creatingMockSession}
-                                        >
-                                            {mins} mins
-                                        </button>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        className={`sr-duration-pill ${durationOption === 'custom' ? 'is-active' : ''}`}
-                                        onClick={() => {
-                                            setDurationOption('custom');
-                                            if (!examDurationMinutes || [15, 30, 45, 60, 90].includes(Number(examDurationMinutes))) {
-                                                setExamDurationMinutes('120');
-                                            }
-                                        }}
-                                        disabled={creatingMockSession}
-                                    >
-                                        Custom
-                                    </button>
-                                </div>
-                                {durationOption === 'custom' && (
-                                    <input
-                                        id="mock-exam-duration"
-                                        className="sr-input sr-duration-input"
-                                        type="number"
-                                        min="1"
-                                        max="1440"
-                                        step="1"
-                                        placeholder="Duration in minutes (e.g. 120)"
-                                        value={examDurationMinutes}
-                                        onChange={(event) => setExamDurationMinutes(event.target.value)}
-                                        disabled={creatingMockSession}
-                                        autoFocus
-                                    />
-                                )}
-                                <p className="sr-duration-note">The exam starts only when the creator presses Start Exam inside the mock room.</p>
-                            </div>
-
                             {paperSelectionError && <p className="sr-paper-error" role="alert">{paperSelectionError}</p>}
                         </div>
 
@@ -1487,9 +1427,6 @@ const StudyRoom = () => {
                                 disabled={
                                     creatingMockSession
                                     || (paperSelectionLoading && paperSource === 'dataset')
-                                    || !Number.isInteger(Number(examDurationMinutes))
-                                    || Number(examDurationMinutes) < 1
-                                    || Number(examDurationMinutes) > 1440
                                     || (paperSource === 'dataset' && (!selectedPaperId || !availablePapers.some((paper) => paper.id === selectedPaperId)))
                                     || (paperSource === 'custom' && !customQuestionPaper)
                                 }
