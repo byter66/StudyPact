@@ -115,10 +115,6 @@ export default function Landing() {
               <span className="sp-rail-version">STUDY PLATFORM</span>
             </div>
           </Link>
-          <div className="sp-rail-live-badge">
-            <span className="live-dot-pulse"></span>
-            <span>1,480 Students Studying Now</span>
-          </div>
         </div>
 
         {/* Index Chapters Navigation */}
@@ -223,26 +219,6 @@ export default function Landing() {
               <span>Browse Study Rooms</span>
               <ChevronRight size={16} />
             </a>
-          </div>
-
-          {/* Tabular National Ticker Strip */}
-          <div className="national-metrics-bar">
-            <div className="metric-cell">
-              <span className="metric-val">12,400+</span>
-              <span className="metric-cap">Enrolled Aspirants</span>
-            </div>
-            <div className="metric-cell">
-              <span className="metric-val">98.4%</span>
-              <span className="metric-cap">Daily Pacts Honored</span>
-            </div>
-            <div className="metric-cell">
-              <span className="metric-val">152,000</span>
-              <span className="metric-cap">Focus Hours Logged</span>
-            </div>
-            <div className="metric-cell">
-              <span className="metric-val">0 min</span>
-              <span className="metric-cap">Social Distraction</span>
-            </div>
           </div>
         </section>
 

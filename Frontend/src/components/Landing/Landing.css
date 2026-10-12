@@ -33,8 +33,7 @@
 .sp-rail-header {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-bottom: 24px;
+  padding-bottom: 20px;
   border-bottom: 1px solid var(--border-hairline);
 }
 
@@ -81,27 +80,7 @@
   color: var(--text-tertiary);
 }
 
-.sp-rail-live-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--forest);
-  background-color: var(--forest-subtle);
-  border: 1px solid var(--forest-border);
-  padding: 3px 8px;
-  border-radius: var(--radius-xs);
-  width: fit-content;
-}
 
-.live-dot-pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--forest);
-  box-shadow: 0 0 0 2px rgba(35, 82, 59, 0.25);
-}
 
 /* Rail Navigation Links */
 .sp-rail-nav {
@@ -367,43 +346,12 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 48px;
+  margin-bottom: 0;
 }
 
 .manifesto-btn {
   background-color: var(--primary);
   color: var(--text-inverse);
-}
-
-/* National Ticker Strip */
-.national-metrics-bar {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  padding-top: 32px;
-  border-top: 1px solid var(--border-hairline);
-}
-
-.metric-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.metric-val {
-  font-family: var(--font-serif);
-  font-size: 2.2rem;
-  font-weight: 600;
-  color: var(--text-main);
-  line-height: 1;
-}
-
-.metric-cap {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
 }
 
 /* =========================================================================
@@ -1025,9 +973,6 @@
   .manifesto-headline {
     font-size: 2.75rem;
   }
-  .national-metrics-bar {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 640px) {
@@ -1040,9 +985,6 @@
   .manifesto-cta-row {
     flex-direction: column;
     align-items: stretch;
-  }
-  .national-metrics-bar {
-    grid-template-columns: 1fr;
   }
   .stage-footer {
     grid-template-columns: 1fr;
