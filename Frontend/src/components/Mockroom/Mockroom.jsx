@@ -68,6 +68,7 @@ const MockRoom = () => {
   const draftSaveTimerRef = useRef(null);
   const draftSaveQueueRef = useRef(Promise.resolve());
   const restoredAssignmentRef = useRef(null);
+  const peerEvaluationSessionRef = useRef(null);
 
   const applySessionPayload = useCallback((payload) => {
     const session = payload?.session;
@@ -144,23 +145,6 @@ const MockRoom = () => {
         const payload = response?.data ?? response;
         if (!isMounted) return;
         applySessionPayload(payload);
-        const endsAt = payload?.session?.endsAt;
-        const subStatus = payload?.submission?.status?.toUpperCase();
-        if (
-          (endsAt && Date.parse(endsAt) <= Date.now())
-          || location.state?.assignmentId
-          || subStatus === 'UNDER_EVALUATION'
-          || subStatus === 'EVALUATED'
-        ) {
-          const overview = await getPeerEvaluations(sessionId);
-          if (isMounted) {
-            setPeerEvaluation(overview);
-            if (overview?.available) {
-              setTimeRemaining(0);
-              setPhase('closed');
-            }
-          }
-        }
       } catch (loadError) {
         if (isMounted) {
           setError(loadError?.message || 'Unable to load the mock session.');
@@ -188,22 +172,6 @@ const MockRoom = () => {
         if (!isCurrent) return;
         const payload = response?.data ?? response;
         applySessionPayload(payload);
-        const endsAt = payload?.session?.endsAt;
-        const subStatus = payload?.submission?.status?.toUpperCase();
-        if (
-          (endsAt && Date.parse(endsAt) <= Date.now())
-          || subStatus === 'UNDER_EVALUATION'
-          || subStatus === 'EVALUATED'
-        ) {
-          const overview = await getPeerEvaluations(sessionId);
-          if (isCurrent) {
-            setPeerEvaluation(overview);
-            if (overview?.available) {
-              setTimeRemaining(0);
-              setPhase('closed');
-            }
-          }
-        }
       } catch (refreshError) {
         if (isCurrent) {
           console.error('Unable to refresh mock session state:', refreshError);
@@ -211,10 +179,29 @@ const MockRoom = () => {
         }
       }
     };
+    const refreshPeerEvaluations = async ({ payload } = {}) => {
+      if (!isCurrent || !payload?.peerEvaluationAvailable) return;
+      setPeerEvaluationLoading(true);
+      try {
+        const overview = await getPeerEvaluations(sessionId);
+        if (!isCurrent) return;
+        peerEvaluationSessionRef.current = sessionId;
+        setPeerEvaluation(overview);
+        setTimeRemaining(0);
+        setPhase('closed');
+      } catch (refreshError) {
+        if (isCurrent) {
+          console.error('Unable to refresh peer evaluations:', refreshError);
+          setPeerEvaluationError(refreshError?.message || 'Unable to load peer evaluations.');
+        }
+      } finally {
+        if (isCurrent) setPeerEvaluationLoading(false);
+      }
+    };
     const channel = supabase
       .channel(`mock-room:${sessionId}`)
       .on('broadcast', { event: 'session-updated' }, refreshSession)
-      .on('broadcast', { event: 'submission-updated' }, refreshSession);
+      .on('broadcast', { event: 'submission-updated' }, refreshPeerEvaluations);
 
     mockRoomChannelRef.current = channel;
     channel.subscribe();
@@ -364,14 +351,22 @@ const MockRoom = () => {
   }, [sessionData, phase]);
 
   useEffect(() => {
-    if (!sessionId || !sessionData || phase !== 'closed') return undefined;
+    if (
+      !sessionId
+      || sessionData?.id !== sessionId
+      || phase !== 'closed'
+      || peerEvaluationSessionRef.current === sessionId
+    ) return undefined;
 
     let isCurrent = true;
     setPeerEvaluationLoading(true);
     setPeerEvaluationError('');
     getPeerEvaluations(sessionId)
       .then((overview) => {
-        if (isCurrent) setPeerEvaluation(overview);
+        if (isCurrent) {
+          peerEvaluationSessionRef.current = sessionId;
+          setPeerEvaluation(overview);
+        }
       })
       .catch((loadError) => {
         if (!isCurrent) return;
@@ -385,7 +380,7 @@ const MockRoom = () => {
     return () => {
       isCurrent = false;
     };
-  }, [sessionId, sessionData, phase]);
+  }, [sessionId, sessionData?.id, phase]);
 
   useEffect(() => {
     if (!activePeerAssignment || isSubmittingEvaluation) return undefined;
@@ -508,22 +503,10 @@ const MockRoom = () => {
 
       if (response?.status === 'SUBMITTED' || response?.data?.status === 'SUBMITTED' || response?.id) {
         setSubmission(response?.data || response || null);
-        const sessionResponse = await getMockSession(sessionId);
-        const sessionPayload = sessionResponse?.data ?? sessionResponse;
-        applySessionPayload(sessionPayload);
-        const overview = await getPeerEvaluations(sessionId);
-        if (overview?.available) {
-          setPeerEvaluation(overview);
+        if (response?.peerEvaluationAvailable || response?.data?.peerEvaluationAvailable) {
           setTimeRemaining(0);
           setPhase('closed');
         }
-        void mockRoomChannelRef.current?.send({
-          type: 'broadcast',
-          event: 'submission-updated',
-          payload: { status: 'SUBMITTED' },
-        })?.catch((broadcastError) => {
-          console.error('Unable to broadcast mock submission:', broadcastError);
-        });
       } else {
         throw new Error(response?.message || 'Upload failed.');
       }
@@ -611,14 +594,21 @@ const MockRoom = () => {
       );
       setActivePeerAssignment(null);
       setPeerEvaluationLoading(true);
-      const overview = await getPeerEvaluations(sessionId);
-      setPeerEvaluation(overview);
+      void getPeerEvaluations(sessionId)
+        .then((overview) => {
+          peerEvaluationSessionRef.current = sessionId;
+          setPeerEvaluation(overview);
+        })
+        .catch((loadError) => {
+          console.error('Unable to refresh peer evaluations:', loadError);
+          setPeerEvaluationError(loadError?.message || 'Unable to refresh peer evaluations.');
+        })
+        .finally(() => setPeerEvaluationLoading(false));
     } catch (submitError) {
       console.error('Unable to submit peer evaluation:', submitError);
       setPeerEvaluationError(submitError?.message || 'Unable to submit this evaluation.');
     } finally {
       setIsSubmittingEvaluation(false);
-      setPeerEvaluationLoading(false);
     }
   };
 

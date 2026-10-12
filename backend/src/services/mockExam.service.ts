@@ -337,7 +337,10 @@ export const getMockPapers = async (): Promise<MockExamPaper[]> => {
     .map((row) => normalizeDbPaper(row));
 };
 
-export const getMockPaperById = async (paperId: string): Promise<MockExamPaper | null> => {
+export const getMockPaperById = async (
+  paperId: string,
+  includeDocumentUrl = true,
+): Promise<MockExamPaper | null> => {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paperId);
   if (!isUuid) {
     return null;
@@ -368,7 +371,7 @@ export const getMockPaperById = async (paperId: string): Promise<MockExamPaper |
   }
 
   const paper = normalizeDbPaper({ ...data, mock_questions: questionRows ?? [] });
-  if (typeof data.source_reference === "string" && data.source_reference.startsWith("custom-upload:")) {
+  if (includeDocumentUrl && typeof data.source_reference === "string" && data.source_reference.startsWith("custom-upload:")) {
     const storagePath = data.source_reference.slice("custom-upload:".length);
     const { data: signedUrl, error: signedUrlError } = await supabaseAdmin.storage
       .from("mock-question-papers")
@@ -855,8 +858,11 @@ const getPeerEvaluationContext = async (sessionId: string, participantId: string
   return { session, attempt, submissionDeadlineAt };
 };
 
-const ensurePeerAssignments = async (sessionId: string) => {
-  const session = await getMockSession(sessionId);
+const ensurePeerAssignments = async (
+  sessionId: string,
+  sessionOverride?: MockSession | null,
+) => {
+  const session = sessionOverride ?? await getMockSession(sessionId);
   const { submissionDeadlineAt } = session ? getMockSessionTiming(session) : { submissionDeadlineAt: null };
   if (!session || !submissionDeadlineAt || !session.endsAt || Date.now() < Date.parse(session.endsAt)) {
     return false;
@@ -982,7 +988,21 @@ const signedSubmissionUrl = async (filePath: string) => {
 
 const getParticipantNames = async (participantIds: string[]) => {
   const uniqueIds = [...new Set(participantIds)];
-  const names = await Promise.all(uniqueIds.map(async (id) => {
+  if (!uniqueIds.length) return new Map<string, string>();
+
+  const { data: profiles, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", uniqueIds);
+  if (profileError) throw profileError;
+
+  const names = new Map(
+    (profiles ?? [])
+      .filter((profile) => profile.full_name)
+      .map((profile) => [profile.id, profile.full_name as string]),
+  );
+  const missingIds = uniqueIds.filter((id) => !names.has(id));
+  const fallbackNames = await Promise.all(missingIds.map(async (id) => {
     const { data, error } = await supabaseAdmin.auth.admin.getUserById(id);
     if (error) {
       console.warn("Unable to resolve peer evaluation participant name:", error.message);
@@ -991,18 +1011,13 @@ const getParticipantNames = async (participantIds: string[]) => {
     const metadata = data.user?.user_metadata ?? {};
     return [id, metadata.full_name ?? metadata.name ?? "StudyPact participant"] as const;
   }));
-  return new Map(names);
+  fallbackNames.forEach(([id, name]) => names.set(id, name));
+  return names;
 };
 
 export const getPeerEvaluationOverview = async (sessionId: string, participantId: string) => {
   const { session, attempt, submissionDeadlineAt } = await getPeerEvaluationContext(sessionId, participantId);
-  const available = await ensurePeerAssignments(sessionId);
-  const { data: assignments, error: assignmentError } = await supabaseAdmin
-    .from("evaluator_assignments")
-    .select("id, submission_id, evaluator_id, assigned_at, status")
-    .eq("evaluator_id", participantId)
-    .order("assigned_at", { ascending: true });
-  if (assignmentError) throw assignmentError;
+  const available = await ensurePeerAssignments(sessionId, session);
 
   const attemptIdsResult = await supabaseAdmin
     .from("participant_attempts")
@@ -1020,6 +1035,15 @@ export const getPeerEvaluationOverview = async (sessionId: string, participantId
     : { data: [], error: null };
   if (sessionSubmissionsResult.error) throw sessionSubmissionsResult.error;
   const submissions = sessionSubmissionsResult.data ?? [];
+  const { data: assignments, error: assignmentError } = submissions.length
+    ? await supabaseAdmin
+        .from("evaluator_assignments")
+        .select("id, submission_id, evaluator_id, assigned_at, status")
+        .eq("evaluator_id", participantId)
+        .in("submission_id", submissions.map((submission) => submission.id))
+        .order("assigned_at", { ascending: true })
+    : { data: [], error: null };
+  if (assignmentError) throw assignmentError;
   const submissionById = new Map(submissions.map((submission) => [submission.id, submission]));
   const participantByAttemptId = new Map(
     (attemptIdsResult.data ?? []).map((row) => [row.id, row.participant_id])
@@ -1247,16 +1271,27 @@ export const getPeerEvaluationAssignment = async (
   evaluatorId: string
 ) => {
   const { session } = await getPeerEvaluationContext(sessionId, evaluatorId);
-  const available = await ensurePeerAssignments(sessionId);
-  if (!available) throw new Error("Peer evaluation opens after the submission window closes.");
-
-  const { data: assignment, error: assignmentError } = await supabaseAdmin
+  let { data: assignment, error: assignmentError } = await supabaseAdmin
     .from("evaluator_assignments")
     .select("id, submission_id, evaluator_id, status")
     .eq("id", assignmentId)
     .eq("evaluator_id", evaluatorId)
     .maybeSingle();
   if (assignmentError) throw assignmentError;
+
+  if (!assignment) {
+    const available = await ensurePeerAssignments(sessionId, session);
+    if (!available) throw new Error("Peer evaluation opens after the submission window closes.");
+    const result = await supabaseAdmin
+      .from("evaluator_assignments")
+      .select("id, submission_id, evaluator_id, status")
+      .eq("id", assignmentId)
+      .eq("evaluator_id", evaluatorId)
+      .maybeSingle();
+    assignment = result.data;
+    assignmentError = result.error;
+    if (assignmentError) throw assignmentError;
+  }
   if (!assignment) throw new Error("Assigned evaluation not found.");
   if (assignment.status === "completed") throw new Error("This evaluation has already been completed.");
 
@@ -1270,17 +1305,20 @@ export const getPeerEvaluationAssignment = async (
     throw new Error("You cannot evaluate your own answer script.");
   }
 
-  const { data: targetAttempt, error: attemptError } = await supabaseAdmin
-    .from("participant_attempts")
-    .select("session_id")
-    .eq("id", submission.attempt_id)
-    .maybeSingle();
+  const [attemptResult, paper] = await Promise.all([
+    supabaseAdmin
+      .from("participant_attempts")
+      .select("session_id")
+      .eq("id", submission.attempt_id)
+      .maybeSingle(),
+    getMockPaperById(session.paperId, false),
+  ]);
+  const { data: targetAttempt, error: attemptError } = attemptResult;
   if (attemptError) throw attemptError;
   if (!targetAttempt || targetAttempt.session_id !== sessionId) {
     throw new Error("Assigned submission does not belong to this session.");
   }
 
-  const paper = await getMockPaperById(session.paperId);
   if (!paper) throw new Error("The evaluation rubric could not be loaded.");
   const questions = paper.questions.map((question) => ({
     id: question.id,
@@ -1295,7 +1333,8 @@ export const getPeerEvaluationAssignment = async (
     throw new Error("This paper does not have a usable evaluation rubric.");
   }
 
-  if (assignment.status === "assigned") {
+  const claimAssignment = async () => {
+    if (assignment.status !== "assigned") return;
     const { data: claimed, error: claimError } = await supabaseAdmin
       .from("evaluator_assignments")
       .update({ status: "in_progress" })
@@ -1317,27 +1356,29 @@ export const getPeerEvaluationAssignment = async (
         throw new Error("This evaluation is no longer available.");
       }
     }
-  }
-
-  const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(submission.participant_id);
-  if (userError) console.warn("Unable to resolve evaluated participant name:", userError.message);
-  const metadata = userData?.user?.user_metadata ?? {};
-  const { data: signedUrl, error: signedUrlError } = await supabaseAdmin.storage
-    .from(MOCK_SUBMISSIONS_BUCKET)
-    .createSignedUrl(submission.file_path, 60 * 60);
+  };
+  const [names, signedUrlResult, draftScoreResult] = await Promise.all([
+    getParticipantNames([submission.participant_id]),
+    supabaseAdmin.storage
+      .from(MOCK_SUBMISSIONS_BUCKET)
+      .createSignedUrl(submission.file_path, 60 * 60),
+    supabaseAdmin
+      .from("evaluator_scores")
+      .select("rubric_scores, comments")
+      .eq("assignment_id", assignmentId)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    claimAssignment(),
+  ]);
+  const { data: signedUrl, error: signedUrlError } = signedUrlResult;
   if (signedUrlError) throw signedUrlError;
-  const { data: draftScore, error: draftScoreError } = await supabaseAdmin
-    .from("evaluator_scores")
-    .select("rubric_scores, comments")
-    .eq("assignment_id", assignmentId)
-    .order("submitted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: draftScore, error: draftScoreError } = draftScoreResult;
   if (draftScoreError) throw draftScoreError;
 
   return {
     assignmentId,
-    participantName: metadata.full_name ?? metadata.name ?? "StudyPact participant",
+    participantName: names.get(submission.participant_id) || "StudyPact participant",
     answerScriptUrl: signedUrl.signedUrl,
     questions,
     rubricScores: draftScore?.rubric_scores ?? [],
@@ -1387,7 +1428,7 @@ export const savePeerEvaluationDraft = async (
     throw new Error("Assigned submission does not belong to this session.");
   }
 
-  const paper = await getMockPaperById(session.paperId);
+  const paper = await getMockPaperById(session.paperId, false);
   if (!paper) throw new Error("The evaluation rubric could not be loaded.");
   const questions = new Map(paper.questions.map((question) => [question.id, question]));
   const seenQuestionIds = new Set<string>();
@@ -1493,7 +1534,7 @@ export const submitPeerEvaluation = async (
     throw new Error("Assigned submission does not belong to this session.");
   }
 
-  const paper = await getMockPaperById(session.paperId);
+  const paper = await getMockPaperById(session.paperId, false);
   if (!paper) throw new Error("The evaluation rubric could not be loaded.");
   const questions = new Map(paper.questions.map((question) => [question.id, question]));
   if (questions.size > 0 && (!Array.isArray(rubricScores) || rubricScores.length !== questions.size)) {
@@ -2001,7 +2042,7 @@ export const uploadAndStoreMockSubmission = async ({
   fileName: string;
   fileType: string;
   fileSize: number;
-}): Promise<MockSubmissionRecord> => {
+}): Promise<MockSubmissionRecord & { peerEvaluationAvailable: boolean }> => {
   validatePdfSubmission({ name: fileName, type: fileType, size: fileBuffer.length });
   if (Number(fileSize) !== fileBuffer.length) {
     throw new Error("The uploaded file size could not be verified.");
@@ -2107,14 +2148,12 @@ export const uploadAndStoreMockSubmission = async ({
     throw attemptUpdateError;
   }
   const peerEvaluationAvailable = await ensurePeerAssignments(sessionId);
-  try {
-    await broadcastMockRoomUpdate(sessionId, "submission-updated", {
+  void broadcastMockRoomUpdate(sessionId, "submission-updated", {
       status: "SUBMITTED",
       peerEvaluationAvailable,
+    }).catch((broadcastError) => {
+      console.error("Unable to broadcast mock submission update:", broadcastError);
     });
-  } catch (broadcastError) {
-    console.error("Unable to broadcast mock submission update:", broadcastError);
-  }
 
-  return record;
+  return { ...record, peerEvaluationAvailable };
 };

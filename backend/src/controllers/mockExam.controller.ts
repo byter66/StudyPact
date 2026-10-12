@@ -496,6 +496,7 @@ export const submitMockPdf = async (req: AuthenticatedRequest, res: Response) =>
         filePath: record.filePath,
         fileType: record.fileType,
         fileSize: record.fileSize,
+        peerEvaluationAvailable: record.peerEvaluationAvailable,
       },
     });
   } catch (error: any) {
