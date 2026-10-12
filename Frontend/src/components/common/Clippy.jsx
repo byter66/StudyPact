@@ -7,6 +7,7 @@ const CLIPPY_TIPS = {
     { text: "Pick a goal for today and you'll be ready to go!", target: 'dashboard-goals' },
     { text: 'Every study day adds to your streak. You’ve got this!', target: 'dashboard-streak' },
     { text: 'Join a room and make studying a team effort.', target: 'dashboard-join-room' },
+    { text: 'Already have a room code? Pop it in here and join your study group!', target: 'dashboard-room-code' },
     { text: 'Ready to study together? Start a room for your group!', target: 'dashboard-create-room' },
   ],
   studyRoom: [
@@ -35,24 +36,7 @@ const CLIPPY_TIPS = {
   ],
 };
 
-const TOUR_STORAGE_PREFIX = 'studypact_clippy_';
 const HIGHLIGHT_CLASS = 'clippy-feature-highlight';
-
-const hasSeenTour = (context) => {
-  try {
-    return window.localStorage.getItem(`${TOUR_STORAGE_PREFIX}${context}_tour_seen`) === 'true';
-  } catch {
-    return false;
-  }
-};
-
-const markTourSeen = (context) => {
-  try {
-    window.localStorage.setItem(`${TOUR_STORAGE_PREFIX}${context}_tour_seen`, 'true');
-  } catch {
-    // Clippy remains usable when browser storage is unavailable.
-  }
-};
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
 
@@ -147,12 +131,11 @@ export default function Clippy({ context }) {
       return;
     }
     setOpen(true);
-    setTourActive(!tourCompleted && !hasSeenTour(context));
+    setTourActive(!tourCompleted);
   };
 
   const handleNextTip = () => {
     if (tourActive && tipIndex === tips.length - 1) {
-      markTourSeen(context);
       setTourActive(false);
       setTourCompleted(true);
       setPosition(null);

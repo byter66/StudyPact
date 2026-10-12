@@ -445,7 +445,7 @@ export default function Dashboard() {
             </span>
           </nav>
 
-          <form className="sp-station-keyport" onSubmit={handleJoinByCode}>
+          <form className="sp-station-keyport" data-clippy-target="dashboard-room-code" onSubmit={handleJoinByCode}>
             <span className="sp-keyport-label">ROOM CODE:</span>
             <input
               className="sp-keyport-input"
