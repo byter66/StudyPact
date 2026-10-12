@@ -36,11 +36,15 @@ const MockRoom = () => {
   const { id } = useParams();
   const location = useLocation();
   const { user } = useAuth();
+  const userId = user?.id;
+  const presenceDisplayName = user?.full_name || 'StudyPact member';
   const sessionId = id;
 
   const [sessionData, setSessionData] = useState(null);
   const [paper, setPaper] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [presence, setPresence] = useState({ sessionId: null, participants: [] });
+  const [presenceError, setPresenceError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [peerEvaluation, setPeerEvaluation] = useState(null);
@@ -221,6 +225,101 @@ const MockRoom = () => {
       void supabase.removeChannel(channel);
     };
   }, [applySessionPayload, sessionId, location.state?.assignmentId]);
+
+  useEffect(() => {
+    setPresence({ sessionId, participants: [] });
+    setPresenceError('');
+    if (!sessionId || !userId) return undefined;
+    if (!supabase) {
+      setPresenceError('Realtime presence is not configured.');
+      return undefined;
+    }
+
+    let isCurrent = true;
+    let channel = null;
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+    let reconnecting = false;
+
+    const syncParticipants = (source = channel) => {
+      if (!isCurrent || !source) return;
+      const uniqueParticipants = new Map();
+      Object.values(source.presenceState()).flat().forEach((presence) => {
+        if (!presence.user_id || uniqueParticipants.has(presence.user_id)) return;
+        uniqueParticipants.set(presence.user_id, {
+          id: presence.user_id,
+          displayName: presence.display_name || 'StudyPact member',
+        });
+      });
+      setPresence({ sessionId, participants: [...uniqueParticipants.values()] });
+    };
+
+    const subscribeToMockRoom = () => {
+      if (!isCurrent || reconnecting) return;
+      reconnecting = true;
+      const activeChannel = supabase.channel(`mock-room-presence:${sessionId}`, {
+        config: { presence: { key: userId } },
+      });
+      channel = activeChannel;
+
+      activeChannel
+        .on('presence', { event: 'sync' }, () => syncParticipants(activeChannel))
+        .on('presence', { event: 'join' }, () => syncParticipants(activeChannel))
+        .on('presence', { event: 'leave' }, () => syncParticipants(activeChannel));
+
+      activeChannel.subscribe(async (status) => {
+        if (!isCurrent || channel !== activeChannel) return;
+
+        if (status === 'SUBSCRIBED') {
+          reconnectAttempts = 0;
+          reconnecting = false;
+          setPresenceError('');
+          const { error: trackError } = await activeChannel.track({
+            user_id: userId,
+            display_name: presenceDisplayName,
+          });
+          if (!isCurrent || channel !== activeChannel) return;
+          if (trackError) {
+            setPresenceError('Unable to announce your Mock Room presence.');
+            console.error('Unable to track Mock Room presence:', trackError);
+            return;
+          }
+          syncParticipants(activeChannel);
+        } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+          reconnecting = false;
+          if (reconnectAttempts >= 3 || reconnectTimer) {
+            setPresenceError('Mock Room presence could not reconnect. Please re-enter the room.');
+            return;
+          }
+          reconnectAttempts += 1;
+          setPresenceError('Reconnecting to Mock Room presence...');
+          const failedChannel = activeChannel;
+          reconnectTimer = window.setTimeout(async () => {
+            reconnectTimer = null;
+            if (!isCurrent) return;
+            await supabase.removeChannel(failedChannel);
+            if (channel === failedChannel) channel = null;
+            subscribeToMockRoom();
+          }, reconnectAttempts * 1000);
+        }
+      });
+    };
+
+    subscribeToMockRoom();
+
+    return () => {
+      isCurrent = false;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      const activeChannel = channel;
+      channel = null;
+      if (activeChannel) {
+        void activeChannel.untrack().catch((untrackError) => {
+          console.error('Unable to untrack Mock Room presence:', untrackError);
+        });
+        void supabase.removeChannel(activeChannel);
+      }
+    };
+  }, [sessionId, userId, presenceDisplayName]);
 
   useEffect(() => {
     if (!sessionData || (phase !== 'live' && phase !== 'submission-window')) return undefined;
@@ -528,6 +627,7 @@ const MockRoom = () => {
   const submissionStatus = submission?.status?.toUpperCase();
   const submissionComplete = ['SUBMITTED', 'UNDER_EVALUATION', 'EVALUATED'].includes(submissionStatus);
   const canSubmit = phase === 'submission-window' && !submissionComplete;
+  const participants = presence.sessionId === sessionId ? presence.participants : [];
 
   if (sessionLoading) {
     return (
@@ -616,6 +716,27 @@ const MockRoom = () => {
           {showUploadPanel ? 'Leave Mock Room' : 'Back to room'}
         </Link>
       </header>
+
+      <section className="mr-presence-panel" aria-label="Mock Room participants" aria-live="polite">
+        <div className="mr-presence-heading">
+          <p className="mr-panel-label">Participants</p>
+          <span className="mr-presence-count">{participants.length}</span>
+        </div>
+        {presenceError ? <p className="mr-presence-error" role="status">{presenceError}</p> : null}
+        {participants.length ? (
+          <ul className="mr-presence-list">
+            {participants.map((participant) => (
+              <li key={participant.id} className="mr-presence-participant">
+                <span className="mr-presence-dot" aria-hidden="true" />
+                <span>{participant.displayName}</span>
+                {participant.id === userId ? <span className="mr-presence-you">You</span> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mr-presence-empty">Waiting for participants to connect…</p>
+        )}
+      </section>
 
       <div className={`mr-body ${phase === 'draft' || showUploadPanel ? 'mr-body-single' : ''}`}>
         <section className="mr-panel mr-paper-panel">
