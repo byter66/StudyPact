@@ -32,12 +32,12 @@ export const uploadDoubtImages = async (roomId, doubtId, images) => {
     return result.data;
 };
 
-export const createDoubtReply = async (roomId, doubtId, content, requestId) => {
+export const createDoubtReply = async (roomId, doubtId, content, requestId, image) => {
     const result = await apiRequest(
         `/api/rooms/${encodeURIComponent(roomId)}/doubts/${encodeURIComponent(doubtId)}/replies`,
         {
             method: "POST",
-            body: JSON.stringify({ content, requestId }),
+            body: JSON.stringify({ content, requestId, ...(image ? { image } : {}) }),
         },
     );
 

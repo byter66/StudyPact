@@ -198,6 +198,7 @@ export const postDoubtReply = async (
   const content =
     typeof req.body?.content === "string" ? req.body.content.trim() : "";
   const requestId = req.body?.requestId;
+  const image = req.body?.image;
 
   if (!isValidUuid(roomId) || !isValidUuid(doubtId)) {
     res.status(400).json({ success: false, message: "Invalid room or doubt ID" });
@@ -215,7 +216,7 @@ export const postDoubtReply = async (
   if (!content || content.length > MAX_DOUBT_LENGTH) {
     res.status(400).json({
       success: false,
-      message: "content must be between 1 and 5000 characters",
+      message: "Reply text must be between 1 and 5000 characters.",
     });
     return;
   }
@@ -223,6 +224,20 @@ export const postDoubtReply = async (
   if (requestId !== undefined && !isValidUuid(requestId)) {
     res.status(400).json({ success: false, message: "requestId must be a valid UUID." });
     return;
+  }
+
+  let validatedImage: DoubtImageInput | undefined;
+  if (image !== undefined) {
+    if (!image || typeof image.data !== "string" || typeof image.mimeType !== "string" || !ALLOWED_IMAGE_TYPES.has(image.mimeType) || !/^[A-Za-z0-9+/]+={0,2}$/.test(image.data)) {
+      res.status(400).json({ success: false, message: "Only JPEG, PNG, WebP, and GIF images are supported." });
+      return;
+    }
+    const buffer = Buffer.from(image.data, "base64");
+    if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) {
+      res.status(400).json({ success: false, message: "Each image must be 3 MB or smaller." });
+      return;
+    }
+    validatedImage = { data: image.data, mimeType: image.mimeType };
   }
 
   if (!(await isRoomMember(roomId, userId))) {
@@ -233,7 +248,7 @@ export const postDoubtReply = async (
     return;
   }
 
-  const reply = await createDoubtReply(roomId, doubtId, userId, content, requestId);
+  const reply = await createDoubtReply(roomId, doubtId, userId, content, requestId, validatedImage);
   if (!reply) {
     res.status(404).json({
       success: false,

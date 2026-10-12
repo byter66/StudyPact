@@ -8,8 +8,12 @@ export const errorHandler = (
 ) => {
   console.error(err);
 
+  const publicMessage = err.message.startsWith("Reply image support is not enabled in the database.")
+    ? err.message
+    : "Internal server error";
+
   res.status(500).json({
     success: false,
-    message: "Internal server error",
+    message: publicMessage,
   });
 };

@@ -18,6 +18,8 @@ export interface DoubtReply {
   content: string;
   createdAt: string;
   updatedAt: string;
+  imagePath?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface DoubtReplyRow {
@@ -27,6 +29,7 @@ export interface DoubtReplyRow {
   content: string;
   created_at: string;
   updated_at: string;
+  image_path?: string | null;
 }
 
 export interface DoubtImage {

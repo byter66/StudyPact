@@ -11,6 +11,7 @@ import {
 } from "../types/doubt.types";
 
 const DOUBT_IMAGES_BUCKET = "doubt-images";
+const MAX_REPLY_IMAGE_BYTES = 3 * 1024 * 1024;
 export const MAX_DOUBT_IMAGE_COUNT = 3;
 const DOUBT_COLUMNS =
   "id, room_id, user_id, content, created_at, updated_at";
@@ -103,6 +104,7 @@ const toReply = (
   userId: row.user_id,
   authorName: namesByUserId.get(row.user_id) || "StudyPact member",
   content: row.content,
+  imagePath: row.image_path ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -144,7 +146,7 @@ export const listDoubtsForRoom = async (
   const { data: replyRows, error: repliesError } = rows.length
     ? await supabaseAdmin
         .from("doubt_replies")
-        .select("id, doubt_id, user_id, content, created_at, updated_at")
+        .select("id, doubt_id, user_id, content, image_path, created_at, updated_at")
         .in("doubt_id", rows.map((row) => row.id))
         .order("created_at", { ascending: true })
     : { data: [], error: null };
@@ -173,11 +175,13 @@ export const listDoubtsForRoom = async (
     ])
   );
   const repliesByDoubtId = new Map<string, DoubtReply[]>();
-  replies.forEach((reply) => {
+  for (const reply of replies) {
     const existing = repliesByDoubtId.get(reply.doubt_id) ?? [];
-    existing.push(toReply(reply, replyNamesByUserId));
+    const mapped = toReply(reply, replyNamesByUserId);
+    if (mapped.imagePath) mapped.imageUrl = await getSignedImageUrl(mapped.imagePath);
+    existing.push(mapped);
     repliesByDoubtId.set(reply.doubt_id, existing);
-  });
+  }
 
   return rows.map((row) => ({
     ...toDoubt(row),
@@ -193,6 +197,7 @@ export const createDoubtReply = async (
   userId: string,
   content: string,
   requestId?: string,
+  image?: DoubtImageInput,
 ): Promise<DoubtReply | null> => {
   const { data: doubt, error: doubtError } = await supabaseAdmin
     .from("doubts")
@@ -208,21 +213,31 @@ export const createDoubtReply = async (
     return null;
   }
 
+  const replyId = crypto.randomUUID();
+  const extension = image?.mimeType.split("/")[1] || "bin";
+  const imagePath = image ? `${roomId}/${doubtId}/replies/${replyId}.${extension}` : null;
+  if (image) {
+    const buffer = Buffer.from(image.data, "base64");
+    if (buffer.length === 0 || buffer.length > MAX_REPLY_IMAGE_BYTES) throw new Error("Reply image must be 3 MB or smaller.");
+    const { error: uploadError } = await supabaseAdmin.storage.from(DOUBT_IMAGES_BUCKET).upload(imagePath!, buffer, { contentType: image.mimeType, upsert: false });
+    if (uploadError) throw uploadError;
+  }
   let { data, error } = await supabaseAdmin
     .from("doubt_replies")
     .insert({
       doubt_id: doubtId,
+      ...(imagePath ? { id: replyId, image_path: imagePath } : {}),
       user_id: userId,
       content: content.trim(),
       ...(requestId ? { client_request_id: requestId } : {}),
     })
-    .select("id, doubt_id, user_id, content, created_at, updated_at")
+    .select("id, doubt_id, user_id, content, image_path, created_at, updated_at")
     .single();
 
   if (error?.code === "23505" && requestId) {
     const existing = await supabaseAdmin
       .from("doubt_replies")
-      .select("id, doubt_id, user_id, content, created_at, updated_at")
+      .select("id, doubt_id, user_id, content, image_path, created_at, updated_at")
       .eq("doubt_id", doubtId)
       .eq("user_id", userId)
       .eq("client_request_id", requestId)
@@ -230,7 +245,13 @@ export const createDoubtReply = async (
     data = existing.data;
     error = existing.error;
   }
+  if (imagePath && data?.id !== replyId) {
+    await supabaseAdmin.storage.from(DOUBT_IMAGES_BUCKET).remove([imagePath]);
+  }
   if (error) {
+    if (image && (error.code === "PGRST204" || error.code === "42703")) {
+      throw new Error("Reply image support is not enabled in the database. Apply migration 20261012110000_add_doubt_reply_image_path.sql and refresh the Supabase schema cache.");
+    }
     throw error;
   }
 
@@ -244,10 +265,12 @@ export const createDoubtReply = async (
     throw profileError;
   }
 
-  return toReply(
+  const reply = toReply(
     data as DoubtReplyRow,
     new Map([[userId, profile?.full_name || "StudyPact member"]])
   );
+  if (reply.imagePath) reply.imageUrl = await getSignedImageUrl(reply.imagePath);
+  return reply;
 };
 
 export const uploadDoubtImages = async (

@@ -29,6 +29,16 @@ const readImage = (file) => new Promise((resolve, reject) => {
     reader.readAsDataURL(file);
 });
 
+function ReplyImagePreview({ file }) {
+    const [url, setUrl] = useState('');
+    useEffect(() => {
+        const objectUrl = URL.createObjectURL(file);
+        setUrl(objectUrl);
+        return () => URL.revokeObjectURL(objectUrl);
+    }, [file]);
+    return <img src={url} alt="Reply preview" className="df-reply-preview" />;
+}
+
 const formatTimeAgo = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
@@ -58,6 +68,7 @@ const formatDoubt = (doubt) => ({
         userId: reply.userId,
         author: reply.authorName || 'Student',
         text: reply.content,
+        imageUrl: reply.imageUrl || null,
         createdAt: formatTimeAgo(reply.createdAt),
         rawCreatedAt: reply.createdAt,
     })),
@@ -85,6 +96,7 @@ function DoubtForumInner() {
     const [replyingId, setReplyingId] = useState(null);
     const [postError, setPostError] = useState('');
     const [replyDrafts, setReplyDrafts] = useState({});
+    const [replyImages, setReplyImages] = useState({});
     const [openReplyId, setOpenReplyId] = useState(null);
     const [lightboxImage, setLightboxImage] = useState(null);
     const realtimeRetryTimerRef = useRef(null);
@@ -319,24 +331,28 @@ function DoubtForumInner() {
 
     const handleReplySubmit = async (doubtId) => {
         const text = (replyDrafts[doubtId] || '').trim();
+        const imageFile = replyImages[doubtId];
         const doubt = doubts.find((item) => item.id === doubtId);
-        if (!text || !doubt || replyingId === doubtId) return;
+        if ((!text && !imageFile) || !doubt || replyingId === doubtId) return;
 
         setReplyingId(doubtId);
         setPostError('');
 
         try {
             const previousRequest = replyRequestIdsRef.current.get(doubtId);
-            const requestId = previousRequest?.content === text
+            const requestKey = `${text}\n${imageFile ? `${imageFile.name}:${imageFile.size}:${imageFile.lastModified}` : ''}`;
+            const requestId = previousRequest?.content === requestKey
                 ? previousRequest.requestId
                 : crypto.randomUUID();
-            replyRequestIdsRef.current.set(doubtId, { content: text, requestId });
-            const reply = await createDoubtReply(currentRoomId, doubtId, text, requestId);
+            replyRequestIdsRef.current.set(doubtId, { content: requestKey, requestId });
+            const image = imageFile ? await readImage(imageFile) : undefined;
+            const reply = await createDoubtReply(currentRoomId, doubtId, text, requestId, image);
             replyRequestIdsRef.current.delete(doubtId);
             const formattedReply = {
                 id: reply.id,
                 author: reply.authorName || 'Student',
                 text: reply.content,
+                imageUrl: reply.imageUrl || null,
                 createdAt: 'just now',
             };
             setDoubts((prev) =>
@@ -349,6 +365,7 @@ function DoubtForumInner() {
                 )
             );
             setReplyDrafts((prev) => ({ ...prev, [doubtId]: '' }));
+            setReplyImages((prev) => ({ ...prev, [doubtId]: null }));
             setOpenReplyId(null);
 
             void channelRef.current?.send({
@@ -514,7 +531,16 @@ function DoubtForumInner() {
                                                     <span className="df-author">{reply.author}</span>
                                                     <span className="df-timestamp">{reply.createdAt}</span>
                                                 </div>
-                                                <p className="df-reply-text">{reply.text}</p>
+                                                {reply.text && <p className="df-reply-text">{reply.text}</p>}
+                                                {reply.imageUrl && (
+                                                    <img
+                                                        src={reply.imageUrl}
+                                                        alt="Reply attachment"
+                                                        className="df-reply-image"
+                                                        onClick={() => setLightboxImage(reply.imageUrl)}
+                                                        onError={(event) => { event.currentTarget.alt = 'Reply image could not be loaded'; }}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -537,6 +563,32 @@ function DoubtForumInner() {
                                         disabled={replyingId === doubt.id}
                                         autoFocus
                                     />
+                                    <label className={`df-upload-btn ${replyingId === doubt.id ? 'disabled' : ''}`}>
+                                        📎 {replyImages[doubt.id]?.name || 'Attach image'}
+                                        <input
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp,image/gif"
+                                            hidden
+                                            disabled={replyingId === doubt.id}
+                                            onChange={(event) => {
+                                                const file = event.target.files?.[0];
+                                                event.target.value = '';
+                                                if (!file) return;
+                                                if (!ALLOWED_IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
+                                                    setPostError('Images must be JPEG, PNG, WebP, or GIF files of 3 MB or less.');
+                                                    return;
+                                                }
+                                                setPostError('');
+                                                setReplyImages((prev) => ({ ...prev, [doubt.id]: file }));
+                                            }}
+                                        />
+                                    </label>
+                                    {replyImages[doubt.id] && (
+                                        <div className="df-reply-preview-wrap">
+                                            <ReplyImagePreview file={replyImages[doubt.id]} />
+                                            <button type="button" className="df-btn df-btn-outline" onClick={() => setReplyImages((prev) => ({ ...prev, [doubt.id]: null }))} disabled={replyingId === doubt.id}>Remove</button>
+                                        </div>
+                                    )}
                                     <button
                                         type="button"
                                         className="df-btn df-btn-outline"

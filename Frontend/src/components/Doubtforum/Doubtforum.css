@@ -440,6 +440,24 @@
     gap: 8px;
 }
 
+.df-reply-image,
+.df-reply-preview {
+    display: block;
+    max-width: min(280px, 100%);
+    max-height: 220px;
+    object-fit: contain;
+    border-radius: 8px;
+    margin-top: 8px;
+    cursor: pointer;
+}
+
+.df-reply-preview-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
 .df-reply-input {
     flex: 1;
     border: 1px solid #E4DDCE;
@@ -511,5 +529,9 @@
 
     .df-reply-form {
         flex-direction: column;
+    }
+
+    .df-reply-preview-wrap {
+        align-items: flex-start;
     }
 }
