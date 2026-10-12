@@ -109,6 +109,13 @@ const StudyRoom = () => {
     const myDoubtIdsRef = useRef(new Set());
     const seenReplyIdsRef = useRef(new Set());
     const studyRoomPageRef = useRef(null);
+    const isRunningRef = useRef(isRunning);
+    const timerPhaseRef = useRef(timerPhase);
+    const isFocusModeRef = useRef(isFocusMode);
+    const handleStartPauseRef = useRef(null);
+    isRunningRef.current = isRunning;
+    timerPhaseRef.current = timerPhase;
+    isFocusModeRef.current = isFocusMode;
 
     const requestBrowserFullscreen = () => {
         try {
@@ -120,10 +127,13 @@ const StudyRoom = () => {
     };
 
     const enterFocusMode = () => {
+        isFocusModeRef.current = true;
         setIsFocusMode(true);
     };
 
     const exitFocusMode = () => {
+        // Update the ref synchronously so fullscreenchange from our own exit is ignored.
+        isFocusModeRef.current = false;
         setIsFocusMode(false);
         if (document.fullscreenElement && document.exitFullscreen) {
             try {
@@ -683,6 +693,7 @@ const StudyRoom = () => {
                     }
 
                     // Switch to 5-minute fixed break
+                    exitFocusMode();
                     setTimerPhase('break');
                     setSecondsLeft(BREAK_MINUTES * 60);
                     startedAtRef.current = Date.now();
@@ -845,6 +856,37 @@ const StudyRoom = () => {
             operationInProgressRef.current = false;
         }
     };
+
+    handleStartPauseRef.current = handleStartPause;
+
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            if (document.fullscreenElement || !isFocusModeRef.current) return;
+
+            if (isRunningRef.current && timerPhaseRef.current === 'study') {
+                void handleStartPauseRef.current?.();
+            } else {
+                exitFocusMode();
+            }
+        };
+
+        const handleEscape = (event) => {
+            if (event.key !== 'Escape' || !isFocusModeRef.current) return;
+
+            if (isRunningRef.current && timerPhaseRef.current === 'study') {
+                void handleStartPauseRef.current?.();
+            } else {
+                exitFocusMode();
+            }
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, []);
 
     const handleCreateMockSession = async () => {
         if (!roomId) return;
