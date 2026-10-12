@@ -78,10 +78,6 @@ const Signin = () => {
                     </div>
 
                     <div className="auth-masthead-meta">
-                        <div className="auth-pulse-badge">
-                            <span className="pulse-dot"></span>
-                            <span className="pulse-text">1,420 Aspirants in Live Rooms</span>
-                        </div>
                         <Link to="/" className="auth-nav-link auth-nav-home" title="Return to Home">
                             <ArrowLeft size={13} />
                             <span>Home</span>
