@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2, Users } from 'lucide-react';
+import { BookOpen, ArrowLeft, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Signup.css';
 import { authService } from '../../services/authService';
@@ -55,10 +55,6 @@ const Signup = () => {
                     </div>
 
                     <div className="auth-masthead-meta">
-                        <div className="auth-cohort-pill">
-                            <Users size={13} className="cohort-icon" />
-                            <span className="cohort-text">12,400+ Active Aspirants</span>
-                        </div>
                         <Link to="/" className="auth-nav-link auth-nav-home" title="Return to Home">
                             <ArrowLeft size={13} />
                             <span>Home</span>

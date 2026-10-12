@@ -11,25 +11,7 @@
   grid-template-columns: 1.18fr 0.82fr;
 }
 
-.auth-cohort-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 12px;
-  border-radius: 9999px;
-  background: var(--bg-surface-alt, #F4F1EA);
-  border: 1px solid var(--border-hairline, #E6E1D6);
-}
 
-.cohort-icon {
-  color: var(--terracotta, #BA4A2B);
-}
-
-.cohort-text {
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: var(--text-secondary, #484E49);
-}
 
 /* --------------------------------------------------------------------------
    THE COVENANT CHARTER CARD
@@ -228,9 +210,7 @@
 }
 
 @media (max-width: 600px) {
-  .auth-cohort-pill {
-    display: none;
-  }
+
 
   .covenant-charter-card {
     padding: 18px 14px;
