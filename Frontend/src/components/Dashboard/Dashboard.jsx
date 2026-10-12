@@ -326,13 +326,14 @@ export default function Dashboard() {
     }
   };
 
-  const handleCreateRoom = async ({ name, category }) => {
+  const handleCreateRoom = async ({ name, maxMembers, category }) => {
     setRoomError("");
     try {
       const result = await apiRequest("/api/rooms", {
         method: "POST",
         body: JSON.stringify({
           name,
+          maxMembers,
           examCategory: category || (activeFilter === "All" ? "UPSC" : activeFilter),
           description: "",
         }),
@@ -846,8 +847,6 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     {visibleRooms.map((room) => {
-                      const maxCap = room.maxMembers || 6;
-                      const count = room.memberCount || Math.min(Math.max((room.id ? (room.id.charCodeAt(0) % 5) + 1 : 2), 1), maxCap);
                       const isJoining = joiningRoomId === room.id;
 
                       return (
@@ -883,13 +882,7 @@ export default function Dashboard() {
                           </td>
                           <td>
                             <div className="sp-board-occupancy">
-                              <span className="sp-occupancy-num">{count}/{maxCap}</span>
-                              <div className="sp-occupancy-mini-bar">
-                                <div
-                                  className="sp-occupancy-mini-fill"
-                                  style={{ width: `${(count / maxCap) * 100}%` }}
-                                />
-                              </div>
+                              <span className="sp-occupancy-num">Max {room.maxMembers}</span>
                             </div>
                           </td>
                           <td style={{ textAlign: "right" }}>

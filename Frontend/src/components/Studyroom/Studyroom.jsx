@@ -995,7 +995,9 @@ const StudyRoom = () => {
                         <span>You - {STATUS_LABEL[myStatus]}</span>
                     </button>
 
-                    <p className="sr-panel-label">Members ({members.length})</p>
+                    <p className="sr-panel-label">
+                        Members ({members.length}/{room?.maxMembers})
+                    </p>
                     {memberError && <p className="sr-realtime-error" role="alert">{memberError}</p>}
                     {realtimeError && <p className="sr-realtime-error" role="alert">{realtimeError}</p>}
                     <ul className="sr-member-list">

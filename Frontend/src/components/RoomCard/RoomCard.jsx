@@ -16,8 +16,7 @@ export default function RoomCard({ room, onEnter, disabled = false, index = 0 })
   const [copied, setCopied] = useState(false);
   const badgeClass = EXAM_BADGES[room.examCategory] || "badge-general";
   const serial = String((index ?? 0) + 1).padStart(2, "0");
-  const maxCap = room.maxMembers || 6;
-  const currentCount = room.memberCount || Math.min(Math.max((room.id ? (room.id.charCodeAt(0) % 5) + 1 : 2), 1), maxCap);
+  const maxMembers = room.maxMembers;
 
   const handleCopyCode = (e) => {
     e.stopPropagation();
@@ -66,15 +65,7 @@ export default function RoomCard({ room, onEnter, disabled = false, index = 0 })
           <div className="chamber-occupancy">
             <div className="chamber-occupancy-label">
               <Users size={13} className="chamber-icon" />
-              <span>{currentCount} / {maxCap} Members</span>
-            </div>
-            <div className="chamber-occupancy-segments" aria-label={`Capacity: ${currentCount} of ${maxCap}`}>
-              {Array.from({ length: maxCap }).map((_, i) => (
-                <span
-                  key={i}
-                  className={`occupancy-segment ${i < currentCount ? "filled" : ""}`}
-                />
-              ))}
+              <span>Up to {maxMembers} Members</span>
             </div>
           </div>
 

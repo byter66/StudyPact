@@ -4,6 +4,7 @@ export interface Room {
   name: string;
   examCategory: string;
   description: string;
+  maxMembers: number;
   creatorUserId: string;
   createdAt: string;
   updatedAt: string;
@@ -13,6 +14,7 @@ export interface CreateRoomInput {
   name: string;
   examCategory: string;
   description?: string;
+  maxMembers: number;
   creatorUserId: string;
 }
 
@@ -39,6 +41,7 @@ export interface RoomRow {
   name: string;
   exam_category: string;
   description: string;
+  max_members: number;
   creator_user_id: string;
   created_at: string;
   updated_at: string;

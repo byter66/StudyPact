@@ -13,7 +13,7 @@ import {
 } from "../types/room.types";
 
 const ROOM_COLUMNS =
-  "id, room_code, name, exam_category, description, creator_user_id, created_at, updated_at";
+  "id, room_code, name, exam_category, description, max_members, creator_user_id, created_at, updated_at";
 
 const toRoom = (row: RoomRow): Room => ({
   id: row.id,
@@ -21,6 +21,7 @@ const toRoom = (row: RoomRow): Room => ({
   name: row.name,
   examCategory: row.exam_category,
   description: row.description,
+  maxMembers: row.max_members,
   creatorUserId: row.creator_user_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -79,6 +80,7 @@ export const createRoom = async (input: CreateRoomInput): Promise<Room> => {
       name: input.name.trim(),
       exam_category: input.examCategory.trim(),
       description: input.description?.trim() ?? "",
+      max_members: input.maxMembers,
       creator_user_id: input.creatorUserId,
     })
     .select(ROOM_COLUMNS)

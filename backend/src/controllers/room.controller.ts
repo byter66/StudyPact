@@ -93,7 +93,7 @@ export const getRoomByJoinCode = async (req: Request, res: Response) => {
 };
 
 export const postRoom = async (req: AuthenticatedRequest, res: Response) => {
-  const { name, examCategory, description } = req.body as Partial<CreateRoomInput>;
+  const { name, examCategory, description, maxMembers } = req.body as Partial<CreateRoomInput>;
 
   if (!isNonEmptyString(name) || !isNonEmptyString(examCategory)) {
     res.status(400).json({
@@ -121,12 +121,26 @@ export const postRoom = async (req: AuthenticatedRequest, res: Response) => {
     return;
   }
 
+  if (
+    typeof maxMembers !== "number" ||
+    !Number.isInteger(maxMembers) ||
+    maxMembers < 2 ||
+    maxMembers > 20
+  ) {
+    res.status(400).json({
+      success: false,
+      message: "maxMembers must be an integer between 2 and 20",
+    });
+    return;
+  }
+
   let room: Room;
   try {
     room = await createRoom({
       name,
       examCategory,
       description,
+      maxMembers,
       creatorUserId,
     });
   } catch (error) {
