@@ -992,7 +992,7 @@ const StudyRoom = () => {
             {/* Body grid */}
             <div className="sr-body">
                 {/* Left: presence + active mock rooms */}
-                <aside className="sr-panel sr-presence-panel">
+                <aside className="sr-panel sr-presence-panel" data-clippy-target="study-members">
                     <button
                         className="sr-my-status"
                         onClick={cycleStatus}
@@ -1077,7 +1077,7 @@ const StudyRoom = () => {
                         </div>
                     </div>
 
-                    <div className="sr-timer-duration-config">
+                    <div className="sr-timer-duration-config" data-clippy-target="study-timer">
                         {timerPhase === 'study' ? (
                             <>
                                 <label className="sr-duration-label-wrap">
@@ -1160,7 +1160,7 @@ const StudyRoom = () => {
                         </button>
                     </div>
 
-                    <div className="sr-goal-strip">
+                    <div className="sr-goal-strip" data-clippy-target="study-tasks">
                         <div className="sr-goal-strip-header">
                             <span className="sr-goal-strip-title">My tasks</span>
                             <span className="sr-goal-strip-count">
@@ -1205,6 +1205,7 @@ const StudyRoom = () => {
                 <Link
                     to={`/doubt-forum/${roomId}`}
                     className="sr-floating-btn sr-floating-doubt-btn"
+                    data-clippy-target="study-doubt-forum"
                     aria-label="Open Doubt Forum"
                     title="Open Doubt Forum (?)"
                     onClick={() => {
@@ -1225,6 +1226,7 @@ const StudyRoom = () => {
                 <button
                     type="button"
                     className={`sr-floating-btn sr-floating-chat-btn ${isChatOpen ? 'is-active' : ''}`}
+                    data-clippy-target="study-chat"
                     aria-label={isChatOpen ? 'Hide room chat' : 'Open room chat'}
                     aria-expanded={isChatOpen}
                     title={isChatOpen ? 'Hide room chat' : 'Open room chat (💬)'}

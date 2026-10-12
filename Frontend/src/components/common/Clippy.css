@@ -7,6 +7,23 @@
   align-items: flex-end;
   gap: 10px;
   font-family: var(--font-sans, "Plus Jakarta Sans", sans-serif);
+  transition: left 420ms ease, top 420ms ease;
+}
+
+.clippy-guide.is-moving {
+  bottom: auto;
+}
+
+.clippy-feature-highlight {
+  outline: 2px solid rgba(186, 74, 43, 0.68) !important;
+  outline-offset: 4px;
+  border-radius: 8px;
+  animation: clippy-target-glow 1.3s ease-out both;
+}
+
+@keyframes clippy-target-glow {
+  0%, 100% { outline-color: rgba(186, 74, 43, 0.68); }
+  50% { outline-color: rgba(186, 74, 43, 0.28); }
 }
 
 .clippy-character {
@@ -111,5 +128,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .clippy-character { animation: none; }
+  .clippy-character,
+  .clippy-guide { animation: none; transition: none; }
+  .clippy-feature-highlight { animation: none; }
 }

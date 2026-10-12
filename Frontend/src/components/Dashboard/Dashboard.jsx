@@ -498,7 +498,7 @@ export default function Dashboard() {
             ================================================================== */}
         <aside className="sp-ledger-wing">
           {/* Section 1: Today's Study Covenant (Progress Dial) */}
-          <div className="sp-covenant-box">
+          <div className="sp-covenant-box" data-clippy-target="dashboard-streak">
             <div className="sp-covenant-top">
               <div>
                 <span className="sp-covenant-eyebrow">DAILY ACCOUNTABILITY</span>
@@ -527,7 +527,7 @@ export default function Dashboard() {
           </div>
 
           {/* Section 2: The Daily Commitment Register */}
-          <div className="sp-commitments-box">
+          <div className="sp-commitments-box" data-clippy-target="dashboard-goals">
             <div className="sp-commitments-header">
               <div>
                 <h4 className="sp-commitments-title">Daily Tasks</h4>
@@ -740,6 +740,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 className="sp-btn sp-btn-primary sp-commission-btn"
+                data-clippy-target="dashboard-create-room"
                 onClick={() => setShowCreateModal(true)}
               >
                 <Plus size={16} /> Create Room
@@ -895,6 +896,7 @@ export default function Dashboard() {
                             <button
                               type="button"
                               className="sp-board-enter-btn"
+                              data-clippy-target="dashboard-join-room"
                               disabled={isJoining}
                               onClick={(e) => {
                                 e.stopPropagation();

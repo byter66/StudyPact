@@ -98,6 +98,7 @@ export default function RoomCard({ room, onEnter, disabled = false, index = 0 })
         <button
           type="button"
           className="chamber-enter-btn"
+          data-clippy-target="dashboard-join-room"
           disabled={disabled}
           onClick={(e) => {
             e.stopPropagation();

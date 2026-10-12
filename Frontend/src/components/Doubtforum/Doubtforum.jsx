@@ -403,7 +403,7 @@ function DoubtForumInner() {
                     </div>
                 )}
 
-                <form className="df-post-card" onSubmit={handlePostDoubt}>
+                <form className="df-post-card" data-clippy-target="doubt-composer" onSubmit={handlePostDoubt}>
                     <label className="df-field-label" htmlFor="doubt-text">POST A DOUBT</label>
                     {postError && <p className="df-post-error" role="alert">{postError}</p>}
                     <textarea
@@ -418,7 +418,7 @@ function DoubtForumInner() {
                     />
                     <div className="df-post-actions">
                         <div className="df-post-actions-left">
-                            <label className={`df-upload-btn ${posting ? 'disabled' : ''}`}>
+                            <label className={`df-upload-btn ${posting ? 'disabled' : ''}`} data-clippy-target="doubt-image-upload">
                                 📎 {draftImages.length ? `${draftImages.length} image(s) selected` : 'Attach image'}
                                 <input
                                     type="file"
@@ -461,7 +461,7 @@ function DoubtForumInner() {
                 {loading && <p className="df-state" role="status">Loading doubts...</p>}
                 {realtimeError && <p className="df-realtime-note" role="status">{realtimeError}</p>}
 
-                <div className="df-thread-list">
+                <div className="df-thread-list" data-clippy-target="doubt-list">
                     {!loading && !loadError && doubts.map((doubt) => (
                         <article id={`doubt-${doubt.id}`} key={doubt.id} className={`df-thread ${focusedDoubtId === doubt.id ? 'df-thread-focused' : ''}`}>
                             <div className="df-thread-header">

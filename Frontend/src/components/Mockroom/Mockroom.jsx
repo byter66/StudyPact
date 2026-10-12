@@ -672,6 +672,7 @@ const MockRoom = () => {
                 <button
                   type="button"
                   className="mr-btn mr-btn-primary"
+                  data-clippy-target="mock-submit"
                   onClick={handleSubmitPdf}
                   disabled={!selectedFile || isSubmitting}
                 >
@@ -684,7 +685,7 @@ const MockRoom = () => {
                 </div>
               ) : null}
               {phase === 'closed' || peerEvaluation?.available ? (
-                <section className="mr-peer-evaluation" aria-labelledby="mr-peer-evaluation-title">
+                <section className="mr-peer-evaluation" data-clippy-target="mock-review" aria-labelledby="mr-peer-evaluation-title">
                   <h2 id="mr-peer-evaluation-title">Peer Evaluation</h2>
                   {peerEvaluationLoading ? <p>Loading peer evaluations...</p> : null}
                   {peerEvaluationError ? <p className="mr-peer-error" role="alert">{peerEvaluationError}</p> : null}
@@ -741,6 +742,7 @@ const MockRoom = () => {
                               } : {}),
                             }}
                             className="mr-doubt-entry"
+                            data-clippy-target="mock-doubt-forum"
                             role="link"
                             tabIndex={0}
                             aria-label="Open Doubt Forum — Study Room: Ask questions while evaluating peer papers"
@@ -793,14 +795,14 @@ const MockRoom = () => {
                   {activePeerAssignment ? (
                     <form className="mr-peer-evaluation-form" onSubmit={handleSubmitPeerEvaluation}>
                       <h3>Evaluate {activePeerAssignment.participantName}'s answer script</h3>
-                      <a href={activePeerAssignment.answerScriptUrl} target="_blank" rel="noreferrer">
+                      <a href={activePeerAssignment.answerScriptUrl} target="_blank" rel="noreferrer" data-clippy-target="evaluation-answer">
                         View / download answer script
                       </a>
                       {activePeerAssignment.questions.length === 0 ? (
                         <p>This custom paper has no structured rubric. Inspect the answer script and leave written feedback.</p>
                       ) : null}
                       {activePeerAssignment.questions.map((question, index) => (
-                        <label className="mr-peer-score-row" key={question.id}>
+                        <label className="mr-peer-score-row" key={question.id} data-clippy-target={index === 0 ? 'evaluation-rubric' : undefined}>
                           <span>
                             Question {index + 1}: {question.subject} (max {question.maxMarks}
                             {Number(question.negativeMarks) > 0 ? `, -${question.negativeMarks} incorrect` : ''})
@@ -823,7 +825,7 @@ const MockRoom = () => {
                           />
                         </label>
                       ))}
-                      <label className="mr-peer-comments">
+                      <label className="mr-peer-comments" data-clippy-target="evaluation-comments">
                         Comments
                         <textarea
                           value={evaluationComments}
@@ -957,7 +959,7 @@ const MockRoom = () => {
         )}
 
         {phase === 'live' && (
-          <section className="mr-panel mr-timer-panel">
+          <section className="mr-panel mr-timer-panel" data-clippy-target="mock-timer">
             <div className="mr-timer-card">
               <div className="mr-timer-ring-wrapper">
                 <svg className="mr-timer-ring" viewBox="0 0 100 100">
