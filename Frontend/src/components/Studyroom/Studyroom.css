@@ -588,6 +588,7 @@
 .sr-active-mock-rooms {
     width: 100%;
     min-height: 0;
+    margin-top: 20px;
     margin-bottom: 16px;
 }
 
