@@ -86,6 +86,7 @@ const StudyRoom = () => {
     const [timerPhase, setTimerPhase] = useState('study');
     const [secondsLeft, setSecondsLeft] = useState(DEFAULT_STUDY_MINUTES * 60);
     const [isRunning, setIsRunning] = useState(false);
+    const [isFocusMode, setIsFocusMode] = useState(false);
     const [messages, setMessages] = useState([]);
     const [draft, setDraft] = useState('');
     const [sessionId, setSessionId] = useState(null);
@@ -107,6 +108,36 @@ const StudyRoom = () => {
     const [unreadReplyCount, setUnreadReplyCount] = useState(0);
     const myDoubtIdsRef = useRef(new Set());
     const seenReplyIdsRef = useRef(new Set());
+    const studyRoomPageRef = useRef(null);
+
+    const requestBrowserFullscreen = () => {
+        try {
+            const request = studyRoomPageRef.current?.requestFullscreen?.();
+            request?.catch(() => {});
+        } catch {
+            // Focus Mode remains available through its page-scoped styles.
+        }
+    };
+
+    const enterFocusMode = () => {
+        setIsFocusMode(true);
+    };
+
+    const exitFocusMode = () => {
+        setIsFocusMode(false);
+        if (document.fullscreenElement && document.exitFullscreen) {
+            try {
+                document.exitFullscreen().catch(() => {});
+            } catch {
+                // Leaving the room's CSS focus view does not depend on browser fullscreen.
+            }
+        }
+    };
+
+    // Focus sessions always return to the regular room layout when the automatic break starts.
+    useEffect(() => {
+        if (timerPhase === 'break') exitFocusMode();
+    }, [timerPhase]);
 
     // Restore active server-persisted Pomodoro session on mount / return to room
     useEffect(() => {
@@ -705,11 +736,18 @@ const StudyRoom = () => {
     const handleStartPause = async () => {
         if (operationInProgressRef.current) return;
 
+        const startingStudySession = !isRunning && timerPhase === 'study';
+        if (startingStudySession && studyRoomPageRef.current && !document.fullscreenElement) {
+            // Invoke from the click before awaiting session persistence so browsers retain the gesture.
+            requestBrowserFullscreen();
+        }
+
         operationInProgressRef.current = true;
         setPomodoroError('');
 
         try {
             if (isRunning) {
+                if (timerPhase === 'study') exitFocusMode();
                 if (timerPhase === 'study') {
                     const currentFocusedDuration = getFocusedDuration();
                     setIsRunning(false);
@@ -760,6 +798,7 @@ const StudyRoom = () => {
                 setSecondsLeft(studyMinutes * 60 - currentFocusedDuration);
                 setSessionStatus('active');
                 setIsRunning(true);
+                enterFocusMode();
             } else {
                 // Starting or resuming 5-minute break
                 startedAtRef.current = Date.now() - (BREAK_MINUTES * 60 - secondsLeft) * 1000;
@@ -774,6 +813,8 @@ const StudyRoom = () => {
 
     const handleReset = async () => {
         if (operationInProgressRef.current) return;
+
+        exitFocusMode();
 
         operationInProgressRef.current = true;
         setPomodoroError('');
@@ -945,7 +986,7 @@ const StudyRoom = () => {
     }
 
     return (
-        <div className="sr-page">
+        <div ref={studyRoomPageRef} className={`sr-page${isFocusMode ? ' sr-focus-mode' : ''}`}>
             {/* Top bar */}
             <header className="sr-topbar">
                 <div className="sr-room-info">

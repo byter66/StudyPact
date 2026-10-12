@@ -15,6 +15,43 @@
     overflow: hidden;
 }
 
+/* Scoped distraction-free timer view; normal room styles remain unchanged. */
+.sr-page.sr-focus-mode {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
+    padding: 24px;
+    overflow: auto;
+}
+
+.sr-focus-mode > .sr-topbar,
+.sr-focus-mode .sr-presence-panel,
+.sr-focus-mode .sr-floating-corner-controls,
+.sr-focus-mode .sr-chat {
+    display: none;
+}
+
+.sr-focus-mode > .sr-body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.sr-focus-mode .sr-focus-panel {
+    width: min(100%, 760px);
+    min-height: min(640px, 100%);
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+}
+
+.sr-focus-mode .sr-focus-panel > :not(.sr-timer-wrapper):not(.sr-timer-duration-config):not(.sr-timer-controls):not([role="alert"]) {
+    display: none;
+}
+
 /* ---------- Top bar ---------- */
 
 .sr-topbar {
@@ -1356,6 +1393,16 @@
 }
 
 @media (max-width: 1024px) {
+    .sr-page.sr-focus-mode {
+        height: 100vh;
+        min-height: 100vh;
+        overflow: auto;
+    }
+
+    .sr-focus-mode > .sr-body {
+        display: flex;
+    }
+
     .sr-body {
         grid-template-columns: 1fr;
         overflow-y: auto;
