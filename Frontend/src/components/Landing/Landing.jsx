@@ -142,28 +142,7 @@ export default function Landing() {
           </a>
         </nav>
 
-        {/* Quick Room Access */}
-        <div className="sp-rail-quickbox">
-          <span className="quickbox-title">ROOM QUICK-ACCESS</span>
-          <p className="quickbox-desc">Enter a room code to jump straight into a study room:</p>
-          <div className="quickbox-input-row">
-            <input
-              type="text"
-              placeholder="e.g. UP-7891"
-              value={quickCode}
-              onChange={(e) => setQuickCode(e.target.value.toUpperCase())}
-              maxLength={7}
-              className="quickbox-input"
-            />
-            <Link
-              to={quickCode ? `/study-room/${quickCode}` : '/signin'}
-              className="btn btn-primary btn-sm quickbox-btn"
-            >
-              Enter
-            </Link>
-          </div>
-        </div>
-
+       
         {/* Auth CTAs in Rail */}
         <div className="sp-rail-footer">
           <Link to="/signin" className="btn btn-secondary btn-sm sp-rail-auth-btn">
